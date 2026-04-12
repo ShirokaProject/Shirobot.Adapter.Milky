@@ -1,4 +1,3 @@
-using Milky.Net.Client;
 using System.Net.Http.Headers;
 using ShiroBot.SDK.Abstractions;
 
@@ -21,38 +20,21 @@ internal static class MilkyClientManager
                 BotLog.Info("MilkyClientManager: 客户端已初始化，跳过重复初始化");
                 return;
             }
-
-            var finalBaseAddress = NormalizeBaseAddress(baseAddress);
-            if (!string.IsNullOrEmpty(authToken))
-            {
-                BotLog.Log("MilkyClientManager: 准备使用认证令牌（如果服务器需要 access_token 查询参数，请修改实现）");
-            }
-
+            
             var httpClient = new HttpClient
             {
-                BaseAddress = new Uri(finalBaseAddress),
+                BaseAddress = new Uri(string.IsNullOrWhiteSpace(baseAddress) ? 
+                    throw new ArgumentException("Milky BaseUrl 不能为空。", nameof(baseAddress)) :
+                    baseAddress.Trim().TrimEnd('/') + "/"),
                 Timeout = TimeSpan.FromSeconds(600)
             };
-
+            httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "Milky.Net.Client/1.2");
             if (!string.IsNullOrWhiteSpace(authToken))
             {
                 httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
             }
-
-            httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Milky.Net.Client/1.1");
-
             _instance = new MilkyClient(httpClient);
         }
-    }
-
-    private static string NormalizeBaseAddress(string baseAddress)
-    {
-        if (string.IsNullOrWhiteSpace(baseAddress))
-        {
-            throw new ArgumentException("Milky BaseUrl 不能为空。", nameof(baseAddress));
-        }
-
-        return baseAddress.Trim().TrimEnd('/') + "/";
     }
 }

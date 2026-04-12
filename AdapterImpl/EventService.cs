@@ -1,12 +1,13 @@
-using Milky.Net.Client;
-using MModel = Milky.Net.Model;
 using ShiroBot.MilkyAdapter.Milky;
+using ShiroBot.Model.Common;
 using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
 
 public class EventService : IEventService
 {
+    private bool _attached;
+
     public event Func<GroupIncomingMessage, Task>? GroupMessageReceived;
     public event Func<FriendIncomingMessage, Task>? FriendMessageReceived;
     public event Func<MessageRecallEvent, Task>? MessageRecall;
@@ -26,158 +27,81 @@ public class EventService : IEventService
     public event Func<GroupWholeMuteEvent, Task>? GroupWholeMute;
     public event Func<GroupNudgeEvent, Task>? GroupNudge;
     public event Func<GroupFileUploadEvent, Task>? GroupFileUpload;
-    
+
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
     public void AttachEvent()
     {
-        Milky.Events.MessageReceive += async (_, e) =>
+        if (_attached)
         {
-            switch (e)
-            {
-                case MModel.GroupIncomingMessage groupMessage when GroupMessageReceived is not null:
-                    await GroupMessageReceived(ModelMapper.Convert<GroupIncomingMessage>(groupMessage));
-                    break;
-                case MModel.FriendIncomingMessage friendMessage when FriendMessageReceived is not null:
-                    await FriendMessageReceived(ModelMapper.Convert<FriendIncomingMessage>(friendMessage));
-                    break;
-            }
-        };
+            return;
+        }
 
-        Milky.Events.MessageRecall += async (_, e) =>
-        {
-            if (MessageRecall is not null)
-            {
-                await MessageRecall(ModelMapper.Convert<MessageRecallEvent>(e));
-            }
-        };
+        Milky.EventReceived += OnEventReceivedAsync;
+        _attached = true;
+    }
 
-        Milky.Events.FriendRequest += async (_, e) =>
+    private async Task OnEventReceivedAsync(Event e)
+    {
+        switch (e)
         {
-            if (FriendRequest is not null)
-            {
-                await FriendRequest(ModelMapper.Convert<FriendRequestEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupJoinRequest += async (_, e) =>
-        {
-            if (GroupJoinRequest is not null)
-            {
-                await GroupJoinRequest(ModelMapper.Convert<GroupJoinRequestEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupInvitedJoinRequest += async (_, e) =>
-        {
-            if (GroupInvitedJoinRequest is not null)
-            {
-                await GroupInvitedJoinRequest(ModelMapper.Convert<GroupInvitedJoinRequestEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupInvitation += async (_, e) =>
-        {
-            if (GroupInvitation is not null)
-            {
-                await GroupInvitation(ModelMapper.Convert<GroupInvitationEvent>(e));
-            }
-        };
-
-        Milky.Events.FriendNudge += async (_, e) =>
-        {
-            if (FriendNudge is not null)
-            {
-                await FriendNudge(ModelMapper.Convert<FriendNudgeEvent>(e));
-            }
-        };
-
-        Milky.Events.FriendFileUpload += async (_, e) =>
-        {
-            if (FriendFileUpload is not null)
-            {
-                await FriendFileUpload(ModelMapper.Convert<FriendFileUploadEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupAdminChange += async (_, e) =>
-        {
-            if (GroupAdminChange is not null)
-            {
-                await GroupAdminChange(ModelMapper.Convert<GroupAdminChangeEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupEssenceMessageChange += async (_, e) =>
-        {
-            if (GroupEssenceMessageChange is not null)
-            {
-                await GroupEssenceMessageChange(ModelMapper.Convert<GroupEssenceMessageChangeEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupMemberIncrease += async (_, e) =>
-        {
-            if (GroupMemberIncrease is not null)
-            {
-                await GroupMemberIncrease(ModelMapper.Convert<GroupMemberIncreaseEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupMemberDecrease += async (_, e) =>
-        {
-            if (GroupMemberDecrease is not null)
-            {
-                await GroupMemberDecrease(ModelMapper.Convert<GroupMemberDecreaseEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupNameChange += async (_, e) =>
-        {
-            if (GroupNameChange is not null)
-            {
-                await GroupNameChange(ModelMapper.Convert<GroupNameChangeEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupMessageReaction += async (_, e) =>
-        {
-            if (GroupMessageReaction is not null)
-            {
-                await GroupMessageReaction(ModelMapper.Convert<GroupMessageReactionEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupMute += async (_, e) =>
-        {
-            if (GroupMute is not null)
-            {
-                await GroupMute(ModelMapper.Convert<GroupMuteEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupWholeMute += async (_, e) =>
-        {
-            if (GroupWholeMute is not null)
-            {
-                await GroupWholeMute(ModelMapper.Convert<GroupWholeMuteEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupNudge += async (_, e) =>
-        {
-            if (GroupNudge is not null)
-            {
-                await GroupNudge(ModelMapper.Convert<GroupNudgeEvent>(e));
-            }
-        };
-
-        Milky.Events.GroupFileUpload += async (_, e) =>
-        {
-            if (GroupFileUpload is not null)
-            {
-                await GroupFileUpload(ModelMapper.Convert<GroupFileUploadEvent>(e));
-            }
-        };
+            case GroupIncomingMessage groupMessage when GroupMessageReceived is not null:
+                await GroupMessageReceived(groupMessage);
+                break;
+            case FriendIncomingMessage friendMessage when FriendMessageReceived is not null:
+                await FriendMessageReceived(friendMessage);
+                break;
+            case MessageRecallEvent messageRecall when MessageRecall is not null:
+                await MessageRecall(messageRecall);
+                break;
+            case FriendRequestEvent friendRequest when FriendRequest is not null:
+                await FriendRequest(friendRequest);
+                break;
+            case GroupJoinRequestEvent groupJoinRequest when GroupJoinRequest is not null:
+                await GroupJoinRequest(groupJoinRequest);
+                break;
+            case GroupInvitedJoinRequestEvent invitedJoinRequest when GroupInvitedJoinRequest is not null:
+                await GroupInvitedJoinRequest(invitedJoinRequest);
+                break;
+            case GroupInvitationEvent groupInvitation when GroupInvitation is not null:
+                await GroupInvitation(groupInvitation);
+                break;
+            case FriendNudgeEvent friendNudge when FriendNudge is not null:
+                await FriendNudge(friendNudge);
+                break;
+            case FriendFileUploadEvent friendFileUpload when FriendFileUpload is not null:
+                await FriendFileUpload(friendFileUpload);
+                break;
+            case GroupAdminChangeEvent adminChange when GroupAdminChange is not null:
+                await GroupAdminChange(adminChange);
+                break;
+            case GroupEssenceMessageChangeEvent essenceChange when GroupEssenceMessageChange is not null:
+                await GroupEssenceMessageChange(essenceChange);
+                break;
+            case GroupMemberIncreaseEvent memberIncrease when GroupMemberIncrease is not null:
+                await GroupMemberIncrease(memberIncrease);
+                break;
+            case GroupMemberDecreaseEvent memberDecrease when GroupMemberDecrease is not null:
+                await GroupMemberDecrease(memberDecrease);
+                break;
+            case GroupNameChangeEvent nameChange when GroupNameChange is not null:
+                await GroupNameChange(nameChange);
+                break;
+            case GroupMessageReactionEvent reactionEvent when GroupMessageReaction is not null:
+                await GroupMessageReaction(reactionEvent);
+                break;
+            case GroupMuteEvent muteEvent when GroupMute is not null:
+                await GroupMute(muteEvent);
+                break;
+            case GroupWholeMuteEvent wholeMuteEvent when GroupWholeMute is not null:
+                await GroupWholeMute(wholeMuteEvent);
+                break;
+            case GroupNudgeEvent groupNudge when GroupNudge is not null:
+                await GroupNudge(groupNudge);
+                break;
+            case GroupFileUploadEvent groupFileUpload when GroupFileUpload is not null:
+                await GroupFileUpload(groupFileUpload);
+                break;
+        }
     }
 }

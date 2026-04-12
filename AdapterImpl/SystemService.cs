@@ -1,6 +1,6 @@
-using Milky.Net.Client;
-using MModel = Milky.Net.Model;
 using ShiroBot.MilkyAdapter.Milky;
+using ShiroBot.Model.System.Requests;
+using ShiroBot.Model.System.Responses;
 using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
@@ -9,59 +9,56 @@ public class SystemService : ISystemService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public async Task<GetLoginInfoResponse> GetLoginInfoAsync() =>
-        ModelMapper.Convert<GetLoginInfoResponse>(await Milky.System.GetLoginInfoAsync());
+    public Task<GetLoginInfoResponse> GetLoginInfoAsync() =>
+        Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest());
 
-    public async Task<GetImplInfoResponse> GetImplInfoAsync() =>
-        ModelMapper.Convert<GetImplInfoResponse>(await Milky.System.GetImplInfoAsync());
+    public Task<GetImplInfoResponse> GetImplInfoAsync() =>
+        Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest());
 
-    public async Task<GetUserProfileResponse> GetUserProfileAsync(GetUserProfileRequest request) =>
-        ModelMapper.Convert<GetUserProfileResponse>(
-            await Milky.System.GetUserProfileAsync(ModelMapper.Convert<MModel.GetUserProfileRequest>(request)));
+    public Task<GetUserProfileResponse> GetUserProfileAsync(GetUserProfileRequest request) =>
+        Milky.RequestAsync<GetUserProfileRequest, GetUserProfileResponse>(request);
 
-    public async Task<GetFriendListResponse> GetFriendListAsync(GetFriendListRequest request) =>
-        ModelMapper.Convert<GetFriendListResponse>(
-            await Milky.System.GetFriendListAsync(ModelMapper.Convert<MModel.GetFriendListRequest>(request)));
+    public Task<GetFriendListResponse> GetFriendListAsync(GetFriendListRequest request) =>
+        Milky.RequestAsync<GetFriendListRequest, GetFriendListResponse>(request);
 
-    public async Task<GetFriendInfoResponse> GetFriendInfoAsync(GetFriendInfoRequest request) =>
-        ModelMapper.Convert<GetFriendInfoResponse>(
-            await Milky.System.GetFriendInfoAsync(ModelMapper.Convert<MModel.GetFriendInfoRequest>(request)));
+    public Task<GetFriendInfoResponse> GetFriendInfoAsync(GetFriendInfoRequest request) =>
+        Milky.RequestAsync<GetFriendInfoRequest, GetFriendInfoResponse>(request);
 
-    public async Task DeleteFriendAsync(DeleteFriendRequest request) =>
-        await Milky.Friend.DeleteFriendAsync(ModelMapper.Convert<MModel.DeleteFriendRequest>(request));
+    public Task<GetGroupListResponse> GetGroupListAsync(GetGroupListRequest request) =>
+        Milky.RequestAsync<GetGroupListRequest, GetGroupListResponse>(request);
 
-    public async Task<GetGroupListResponse> GetGroupListAsync(GetGroupListRequest request) =>
-        ModelMapper.Convert<GetGroupListResponse>(
-            await Milky.System.GetGroupListAsync(ModelMapper.Convert<MModel.GetGroupListRequest>(request)));
+    public Task<GetGroupInfoResponse> GetGroupInfoAsync(GetGroupInfoRequest request) =>
+        Milky.RequestAsync<GetGroupInfoRequest, GetGroupInfoResponse>(request);
 
-    public async Task<GetGroupInfoResponse> GetGroupInfoAsync(GetGroupInfoRequest request) =>
-        ModelMapper.Convert<GetGroupInfoResponse>(
-            await Milky.System.GetGroupInfoAsync(ModelMapper.Convert<MModel.GetGroupInfoRequest>(request)));
+    public Task<GetGroupMemberListResponse> GetGroupMemberListAsync(GetGroupMemberListRequest request) =>
+        Milky.RequestAsync<GetGroupMemberListRequest, GetGroupMemberListResponse>(request);
 
-    public async Task<GetGroupMemberListResponse> GetGroupMemberListAsync(GetGroupMemberListRequest request) =>
-        ModelMapper.Convert<GetGroupMemberListResponse>(
-            await Milky.System.GetGroupMemberListAsync(ModelMapper.Convert<MModel.GetGroupMemberListRequest>(request)));
+    public Task<GetGroupMemberInfoResponse> GetGroupMemberInfoAsync(GetGroupMemberInfoRequest request) =>
+        Milky.RequestAsync<GetGroupMemberInfoRequest, GetGroupMemberInfoResponse>(request);
 
-    public async Task<GetGroupMemberInfoResponse> GetGroupMemberInfoAsync(GetGroupMemberInfoRequest request) =>
-        ModelMapper.Convert<GetGroupMemberInfoResponse>(
-            await Milky.System.GetGroupMemberInfoAsync(ModelMapper.Convert<MModel.GetGroupMemberInfoRequest>(request)));
+    public Task SetAvatarAsync(SetAvatarRequest request) =>
+        Milky.RequestAsync(request);
 
-    public async Task SetAvatarAsync(SetAvatarRequest request) =>
-        await Milky.System.SetAvatarAsync(ModelMapper.Convert<MModel.SetAvatarRequest>(request));
+    public Task SetNicknameAsync(SetNicknameRequest request) =>
+        Milky.RequestAsync(request);
 
-    public async Task SetNicknameAsync(SetNicknameRequest request) =>
-        await Milky.System.SetNicknameAsync(ModelMapper.Convert<MModel.SetNicknameRequest>(request));
+    public Task SetBioAsync(SetBioRequest request) =>
+        Milky.RequestAsync(request);
 
-    public async Task SetBioAsync(SetBioRequest request) =>
-        await Milky.System.SetBioAsync(ModelMapper.Convert<MModel.SetBioRequest>(request));
+    public Task<GetCustomFaceUrlListResponse> GetCustomFaceUrlListAsync() =>
+        Milky.RequestAsync<GetCustomFaceUrlListRequest, GetCustomFaceUrlListResponse>(new GetCustomFaceUrlListRequest());
 
-    public async Task<GetCustomFaceUrlListResponse> GetCustomFaceUrlListAsync() =>
-        ModelMapper.Convert<GetCustomFaceUrlListResponse>(await Milky.System.GetCustomFaceUrlListAsync());
+    public Task<GetCookiesResponse> GetCookiesAsync(GetCookiesRequest request) =>
+        Milky.RequestAsync<GetCookiesRequest, GetCookiesResponse>(request);
 
-    public async Task<GetCookiesResponse> GetCookiesAsync(GetCookiesRequest request) =>
-        ModelMapper.Convert<GetCookiesResponse>(
-            await Milky.System.GetCookiesAsync(ModelMapper.Convert<MModel.GetCookiesRequest>(request)));
-
-    public async Task<GetCsrfTokenResponse> GetCsrfTokenAsync() =>
-        ModelMapper.Convert<GetCsrfTokenResponse>(await Milky.System.GetCsrfTokenAsync());
+    public Task<GetCsrfTokenResponse> GetCsrfTokenAsync() =>
+        Milky.RequestAsync<GetCsrfTokenRequest, GetCsrfTokenResponse>(new GetCsrfTokenRequest());
 }
+
+internal sealed record GetLoginInfoRequest();
+
+internal sealed record GetImplInfoRequest();
+
+internal sealed record GetCustomFaceUrlListRequest();
+
+internal sealed record GetCsrfTokenRequest();

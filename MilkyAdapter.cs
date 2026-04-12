@@ -14,7 +14,7 @@ public class MilkyAdapter : IBotAdapter
     public BotComponentMetadata Metadata { get; } = new()
     {
         Name = "MilkyAdapter",
-        Version = "1.1.0",
+        Version = "1.2.0",
         Description = "Milky Adapter for ShiroBot"
     };
 
@@ -43,8 +43,8 @@ public class MilkyAdapter : IBotAdapter
         Logger.Info("开始连接 Milky...");
         try
         {
-            var loginInfo = await milky.System.GetLoginInfoAsync();
-            var result = await milky.System.GetImplInfoAsync();
+            var loginInfo = await System.GetLoginInfoAsync();
+            var result = await System.GetImplInfoAsync();
             Logger.Success($"Milky 登录成功 - Nickname: {loginInfo.Nickname},Milky Impl: {result.ImplName} {result.ImplVersion}");
         }
         catch (Exception)
@@ -53,9 +53,9 @@ public class MilkyAdapter : IBotAdapter
             throw;
         }
 
-        switch (config.Protocol)
+        switch (config.Protocol.ToLowerInvariant())
         {
-            case var s when s.Equals("sse", StringComparison.OrdinalIgnoreCase):
+            case "sse":
                 _eventTokenSource = new CancellationTokenSource();
                 _ = Task.Run(async () =>
                 {
@@ -66,7 +66,7 @@ public class MilkyAdapter : IBotAdapter
                         {
                             retryCount++;
                             Logger.Info($"正在尝试连接 SSE 事件流，第 {retryCount} 次。");
-                            await milky.ReceivingEventUsingSSEAsync(_eventTokenSource.Token);
+                            await milky.Events.ReceivingEventUsingSseAsync(_eventTokenSource.Token);
                         }
                         catch (TaskCanceledException)
                         {
@@ -76,6 +76,7 @@ public class MilkyAdapter : IBotAdapter
                         catch (Exception ex)
                         {
                             Logger.Error($"SSE 事件接收异常: {ex.GetType().Name}: {ex.Message}");
+                            Logger.Error(ex.ToString());
                             try
                             {
                                 await Task.Delay(TimeSpan.FromSeconds(5), _eventTokenSource.Token);
@@ -88,7 +89,7 @@ public class MilkyAdapter : IBotAdapter
                     }
                 });
                 break;
-            case var s when s.Equals("ws", StringComparison.OrdinalIgnoreCase):
+            case "ws":
                 _eventTokenSource = new CancellationTokenSource();
                 _ = Task.Run(async () =>
                 {
@@ -99,16 +100,17 @@ public class MilkyAdapter : IBotAdapter
                         {
                             retryCount++;
                             Logger.Info($"正在尝试连接 WebSocket 事件流，第 {retryCount} 次。");
-                            await milky.ReceivingEventUsingSSEAsync(_eventTokenSource.Token);
+                            await milky.Events.ReceivingEventUsingWebSocketAsync(_eventTokenSource.Token);
                         }
                         catch (TaskCanceledException)
                         {
-                            Logger.Warning("SSE 事件接收已取消。");
+                            Logger.Warning("WebSocket 事件接收已取消。");
                             break;
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error($"SSE 事件接收异常: {ex.GetType().Name}: {ex.Message}");
+                            Logger.Error($"WebSocket 事件接收异常: {ex.GetType().Name}: {ex.Message}");
+                            Logger.Error(ex.ToString());
                             try
                             {
                                 await Task.Delay(TimeSpan.FromSeconds(5), _eventTokenSource.Token);
@@ -121,9 +123,33 @@ public class MilkyAdapter : IBotAdapter
                     }
                 });
                 break;
-            case var s when s.Equals("webhook", StringComparison.OrdinalIgnoreCase):
-                BotLog.Error("暂不支持 Webhook 协议");
-                throw new NotSupportedException("暂不支持 Webhook 协议");
+            case "webhook":
+                if (string.IsNullOrWhiteSpace(config.WebhookUrl))
+                {
+                    BotLog.Error("Webhook 模式下必须配置 WebhookUrl");
+                    throw new ArgumentException("Webhook 模式下必须配置 WebhookUrl", nameof(config.WebhookUrl));
+                }
+
+                _eventTokenSource = new CancellationTokenSource();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        Logger.Info($"正在监听 Webhook 事件: {config.WebhookUrl}");
+                        await milky.Events.ReceivingEventUsingWebhookAsync(config.WebhookUrl, config.WebhookToken, _eventTokenSource.Token);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        Logger.Warning("Webhook 事件接收已取消。");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Webhook 事件接收异常: {ex.GetType().Name}: {ex.Message}");
+                        Logger.Error(ex.ToString());
+                        throw;
+                    }
+                });
+                break;
             default:
                 BotLog.Error("请配置正确的协议,支持的协议有Sse,WebSocket");
                 throw new ArgumentOutOfRangeException();

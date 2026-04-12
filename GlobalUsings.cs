@@ -9,3 +9,4 @@ global using ShiroBot.Model.Message.Requests;
 global using ShiroBot.Model.Message.Responses;
 global using ShiroBot.Model.System.Requests;
 global using ShiroBot.Model.System.Responses;
+global using static ShiroBot.MilkyAdapter.Milky.MilkyJson;
