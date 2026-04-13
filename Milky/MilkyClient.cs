@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ShiroBot.SDK.Abstractions;
 
 namespace ShiroBot.MilkyAdapter.Milky;
 
@@ -26,7 +25,7 @@ public class MilkyClient(HttpClient httpClient)
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions, cancellationToken);
-        return DeserializeResponse<TResponse>(json);
+        return json.Deserialize<TResponse>(JsonOptions) ?? throw new JsonException($"Failed to deserialize response to type {typeof(TResponse).FullName}.");
     }
 
     public async Task RequestAsync<TRequest>(TRequest request, CancellationToken cancellationToken = default)
@@ -75,23 +74,6 @@ public class MilkyClient(HttpClient httpClient)
         }
 
         return builder.ToString();
-    }
-
-    private TResponse DeserializeResponse<TResponse>(JsonElement json)
-    {
-        if (typeof(TResponse) == typeof(JsonElement) || typeof(TResponse) == typeof(JsonElement?))
-        {
-            return (TResponse)(object)json;
-        }
-
-        var result = json.Deserialize<MilkyResult>();
-        if (result is not null && result.HasPayload)
-        {
-            return result.GetResult<TResponse>(JsonOptions);
-        }
-
-        var direct = json.Deserialize<TResponse>(JsonOptions);
-        return direct ?? throw new JsonException($"Cannot deserialize response as {typeof(TResponse).FullName}.");
     }
 }
 
@@ -195,38 +177,5 @@ internal sealed class SnakeCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         }
 
         return builder.ToString();
-    }
-}
-
-internal sealed class MilkyResult
-{
-    [JsonPropertyName("data")]
-    public JsonElement Data { get; init; }
-
-    [JsonPropertyName("retcode")]
-    public int? RetCode { get; init; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; init; }
-
-    [JsonPropertyName("status")]
-    public string? Status { get; init; }
-
-    public bool HasPayload => Data.ValueKind is not JsonValueKind.Undefined;
-
-    public T GetResult<T>(JsonSerializerOptions options)
-    {
-        if (RetCode is > 0)
-        {
-            throw new HttpRequestException($"Milky API business error: retcode={RetCode}, message={Message ?? "unknown"}");
-        }
-
-        if (typeof(T) == typeof(JsonElement?) || typeof(T) == typeof(JsonElement))
-        {
-            return (T)(object)Data;
-        }
-
-        var result = Data.Deserialize<T>(options);
-        return result ?? throw new JsonException($"Cannot deserialize data as {typeof(T).FullName}.");
     }
 }

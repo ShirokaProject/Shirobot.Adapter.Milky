@@ -8,21 +8,37 @@ namespace ShiroBot.MilkyAdapter.Milky;
 
 public sealed class MilkyEventHandler(HttpClient httpClient)
 {
-    private const string EventPath = "event";
-
     public event Func<Event, Task>? EventReceived;
 
     public async Task ReceivingEventUsingWebSocketAsync(CancellationToken cancellationToken = default)
     {
-        if (httpClient.BaseAddress is null)
+        var baseAddress = httpClient.BaseAddress ?? throw new InvalidOperationException("请先设置 HttpClient.BaseAddress");
+        var wsAddress = new Uri(new UriBuilder(baseAddress)
         {
-            throw new InvalidOperationException("请先设置 HttpClient.BaseAddress");
-        }
-
+            Scheme = baseAddress.Scheme switch
+            {
+                "https" => "wss",
+                "http" => "ws",
+                _ => baseAddress.Scheme
+            },
+            Path = $"{baseAddress.AbsolutePath.TrimEnd('/')}/event"
+        }.Uri.AbsoluteUri);
+        
         using var socket = new ClientWebSocket();
-        CopyDefaultHeaders(socket.Options, httpClient);
+        foreach (var header in httpClient.DefaultRequestHeaders)
+        {
+            if (header.Key is "Accept" or "Connection" or "Upgrade" or "Host")
+            {
+                continue;
+            }
 
-        await socket.ConnectAsync(BuildEventUri(httpClient.BaseAddress), cancellationToken);
+            var values = header.Value.Where(static value => !string.IsNullOrWhiteSpace(value)).ToArray();
+            if (values.Length > 0)
+            {
+                socket.Options.SetRequestHeader(header.Key, string.Join(", ", values));
+            }
+        }
+        await socket.ConnectAsync(wsAddress, cancellationToken);
 
         await using var bufferStream = new MemoryStream();
         var buffer = GC.AllocateUninitializedArray<byte>(4096);
@@ -59,7 +75,7 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
     public async Task ReceivingEventUsingSseAsync(CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, EventPath);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/event");
         request.Headers.Accept.ParseAdd("text/event-stream");
 
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -173,7 +189,7 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         await PublishIfNotNullAsync(data);
     }
 
-    private Event? Deserialize(string payload)
+    private static Event? Deserialize(string payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
         {
@@ -206,37 +222,6 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         }
     }
     
-
-    private static Uri BuildEventUri(Uri baseAddress) =>
-        new(new UriBuilder(baseAddress)
-        {
-            Scheme = baseAddress.Scheme switch
-            {
-                "https" => "wss",
-                "http" => "ws",
-                _ => baseAddress.Scheme
-            },
-            Path = "/" + EventPath,
-            Query = string.Empty
-        }.Uri.AbsoluteUri);
-
-    private static void CopyDefaultHeaders(ClientWebSocketOptions options, HttpClient client)
-    {
-        foreach (var header in client.DefaultRequestHeaders)
-        {
-            if (header.Key is "Accept" or "Connection" or "Upgrade" or "Host")
-            {
-                continue;
-            }
-
-            var values = header.Value.Where(static value => !string.IsNullOrWhiteSpace(value)).ToArray();
-            if (values.Length > 0)
-            {
-                options.SetRequestHeader(header.Key, string.Join(", ", values));
-            }
-        }
-    }
-
     private static bool IsWebhookAuthorized(HttpListenerRequest request, string? token)
     {
         if (string.IsNullOrWhiteSpace(token))
