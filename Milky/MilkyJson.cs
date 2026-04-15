@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShiroBot.Model.Common;
 
 namespace ShiroBot.MilkyAdapter.Milky;
 
@@ -18,10 +19,50 @@ internal static class MilkyJson
         };
         options.Converters.Add(new SnakeCaseEnumJsonConverterFactory());
         options.Converters.Add(new EventJsonConverter());
+        options.Converters.Add(new IncomingMessageJsonConverter());
         options.Converters.Add(new IncomingSegmentJsonConverter());
         options.Converters.Add(new OutgoingSegmentJsonConverter());
         return options;
     }
+}
+
+internal sealed class IncomingMessageJsonConverter : JsonConverter<IncomingMessage>
+{
+    private static readonly Dictionary<string, Type> MessageSceneTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["group"] = typeof(GroupIncomingMessage),
+        ["friend"] = typeof(FriendIncomingMessage),
+        ["temp"] = typeof(TempIncomingMessage)
+    };
+
+    public override IncomingMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using var document = JsonDocument.ParseValue(ref reader);
+        var payload = document.RootElement;
+
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("Incoming message payload must be a JSON object.");
+        }
+
+        if (!payload.TryGetProperty("message_scene", out var sceneElement) ||
+            sceneElement.ValueKind != JsonValueKind.String)
+        {
+            throw new JsonException("Incoming message payload missing message_scene.");
+        }
+
+        var scene = sceneElement.GetString();
+        if (scene is null || !MessageSceneTypes.TryGetValue(scene, out var targetType))
+        {
+            throw new JsonException($"Unsupported message_scene '{scene}'.");
+        }
+
+        var result = payload.Deserialize(targetType, options) as IncomingMessage;
+        return result ?? throw new JsonException($"Cannot deserialize incoming message as {targetType.Name}.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, IncomingMessage value, JsonSerializerOptions options) =>
+        JsonSerializer.Serialize(writer, value, value.GetType(), options);
 }
 
 internal sealed class OutgoingSegmentJsonConverter : JsonConverter<OutgoingSegment>

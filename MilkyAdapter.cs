@@ -14,7 +14,7 @@ public class MilkyAdapter : IBotAdapter
     public BotComponentMetadata Metadata { get; } = new()
     {
         Name = "MilkyAdapter",
-        Version = "1.2.0",
+        Version = "1.2.2",
         Description = "Milky Adapter for ShiroBot"
     };
 

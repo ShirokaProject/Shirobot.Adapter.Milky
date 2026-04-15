@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShiroBot.SDK.Abstractions;
 
 namespace ShiroBot.MilkyAdapter.Milky;
 
@@ -64,6 +65,9 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
             if (bufferStream.Length > 0)
             {
                 bufferStream.Position = 0;
+                // Debug log the raw content for troubleshooting
+                // var bufferString = Encoding.UTF8.GetString(bufferStream.ToArray());
+                // BotLog.Info($"Received Raw WebSocket message: {bufferString}");
                 using var document = await JsonDocument.ParseAsync(bufferStream, cancellationToken: cancellationToken);
                 await PublishIfNotNullAsync(document.RootElement.Deserialize<Event>(JsonOptions));
             }
@@ -75,7 +79,13 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
     public async Task ReceivingEventUsingSseAsync(CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/event");
+        var baseAddress = httpClient.BaseAddress ?? throw new InvalidOperationException("请先设置 HttpClient.BaseAddress");
+        var eventUri = new UriBuilder(baseAddress)
+        {
+            Path = $"{baseAddress.AbsolutePath.TrimEnd('/')}/event"
+        }.Uri;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, eventUri);
         request.Headers.Accept.ParseAdd("text/event-stream");
 
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShiroBot.SDK.Abstractions;
 
 namespace ShiroBot.MilkyAdapter.Milky;
 
@@ -22,8 +23,10 @@ public class MilkyClient(HttpClient httpClient)
 
         using var body = JsonContent.Create(request, options: JsonOptions);
         using var response = await httpClient.PostAsync($"api/{ToApiName(typeof(TRequest).Name)}", body, cancellationToken);
+        // Debug log the raw content for troubleshooting
+        // var responseString = await response.Content.ReadAsStringAsync(cancellationToken);
+        // BotLog.Info($"response {responseString}");
         response.EnsureSuccessStatusCode();
-
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonOptions, cancellationToken);
         return DeserializeResponse<TResponse>(json);
     }
