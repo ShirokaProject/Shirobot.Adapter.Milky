@@ -7,4 +7,5 @@ public sealed class MilkyAdapterConfig
     public string AccessToken { get; set; } = string.Empty;
     public string WebhookUrl { get; set; } = string.Empty;
     public string WebhookToken { get; set; } = string.Empty;
+    public bool ForceFileBase64 { get; set; } = false;
 }

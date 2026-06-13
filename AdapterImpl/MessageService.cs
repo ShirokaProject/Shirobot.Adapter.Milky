@@ -8,10 +8,12 @@ public class MessageService : IMessageService
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
     public Task<SendPrivateMessageResponse> SendPrivateMessageAsync(SendPrivateMessageRequest request) =>
-        Milky.RequestAsync<SendPrivateMessageRequest, SendPrivateMessageResponse>(request);
+        Milky.RequestAsync<SendPrivateMessageRequest, SendPrivateMessageResponse>(
+            request with { Message = ResourceUriConverter.Convert(request.Message) });
 
     public Task<SendGroupMessageResponse> SendGroupMessageAsync(SendGroupMessageRequest request) =>
-        Milky.RequestAsync<SendGroupMessageRequest, SendGroupMessageResponse>(request);
+        Milky.RequestAsync<SendGroupMessageRequest, SendGroupMessageResponse>(
+            request with { Message = ResourceUriConverter.Convert(request.Message) });
 
     public Task RecallPrivateMessageAsync(RecallPrivateMessageRequest request) =>
         Milky.RequestAsync(request);

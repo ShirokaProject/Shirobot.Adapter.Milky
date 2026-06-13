@@ -14,7 +14,7 @@ public class MilkyAdapter : IBotAdapter
     public BotComponentMetadata Metadata { get; } = new()
     {
         Name = "MilkyAdapter",
-        Version = "1.2.2",
+        Version = "1.2.3",
         Description = "Milky Adapter for ShiroBot"
     };
 
@@ -35,6 +35,7 @@ public class MilkyAdapter : IBotAdapter
     {
         var config = Config.Load<MilkyAdapterConfig>();
         Config.Save(config);
+        ResourceUriConverter.ForceFileBase64 = config.ForceFileBase64;
 
         MilkyClientManager.Initialize(config.BaseUrl, config.AccessToken);
         var milky = MilkyClientManager.Instance;
@@ -156,4 +157,3 @@ public class MilkyAdapter : IBotAdapter
         }
     }
 }
-

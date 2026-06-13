@@ -10,10 +10,12 @@ public class FileService : IFileService
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
     public Task<UploadPrivateFileResponse> UploadPrivateFileAsync(UploadPrivateFileRequest request) =>
-        Milky.RequestAsync<UploadPrivateFileRequest, UploadPrivateFileResponse>(request);
+        Milky.RequestAsync<UploadPrivateFileRequest, UploadPrivateFileResponse>(
+            request with { FileUri = ResourceUriConverter.Convert(request.FileUri) });
 
     public Task<UploadGroupFileResponse> UploadGroupFileAsync(UploadGroupFileRequest request) =>
-        Milky.RequestAsync<UploadGroupFileRequest, UploadGroupFileResponse>(request);
+        Milky.RequestAsync<UploadGroupFileRequest, UploadGroupFileResponse>(
+            request with { FileUri = ResourceUriConverter.Convert(request.FileUri) });
 
     public Task<GetPrivateFileDownloadUrlResponse> GetPrivateFileDownloadUrlAsync(GetPrivateFileDownloadUrlRequest request) =>
         Milky.RequestAsync<GetPrivateFileDownloadUrlRequest, GetPrivateFileDownloadUrlResponse>(request);
