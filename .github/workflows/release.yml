@@ -31,8 +31,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Restore
+        run: dotnet restore "$PROJECT_DIR" --source https://api.nuget.org/v3/index.json
+
       - name: Publish
-        run: dotnet publish "$PROJECT_DIR" --configuration Release --source https://api.nuget.org/v3/index.json
+        run: dotnet publish "$PROJECT_DIR" --configuration Release --no-restore
 
       - name: Collect Plugin DLL
         shell: bash
