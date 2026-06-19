@@ -43,4 +43,7 @@ public class FileService : IFileService
 
     public Task DeleteGroupFolderAsync(DeleteGroupFolderRequest request) =>
         Milky.RequestAsync(request);
+    
+    public Task PersistGroupFileAsync(PersistGroupFileRequest request) =>
+        Milky.RequestAsync(request);
 }

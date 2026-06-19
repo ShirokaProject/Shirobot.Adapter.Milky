@@ -6,17 +6,17 @@
         <Nullable>enable</Nullable>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <HostAdapterDir>..\ShiroBot\bin\Debug\$(TargetFramework)\adapters\$(AssemblyName)\</HostAdapterDir>
-        <Configurations>Debug;DebugPlugin;DebugAdapter;DebugMilky;DebugAll;Release</Configurations>
+        <Configurations>Debug;Release</Configurations>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\ShiroBot.SDK\ShiroBot.SDK.csproj" PrivateAssets="runtime" />
-        <ProjectReference Include="..\ShiroBot.Model\ShiroBot.Model.csproj" PrivateAssets="runtime" />
-
         <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+
+        <PackageReference Include="ShiroBot.Model" Version="1.3.0-rc1" />
+        <PackageReference Include="ShiroBot.SDK" Version="0.6.0-rc1" />
     </ItemGroup>
 
     <Target Name="RepackAdapter" AfterTargets="Publish" Condition="'$(Configuration)'=='Release'">

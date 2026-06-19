@@ -1,5 +1,4 @@
 using ShiroBot.MilkyAdapter.Milky;
-using ShiroBot.Model.Common;
 using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
@@ -27,6 +26,9 @@ public class EventService : IEventService
     public event Func<GroupWholeMuteEvent, Task>? GroupWholeMute;
     public event Func<GroupNudgeEvent, Task>? GroupNudge;
     public event Func<GroupFileUploadEvent, Task>? GroupFileUpload;
+    public event Func<GroupDisbandEvent, Task>? GroupDisband;
+    public event Func<PeerPinChangeEvent, Task>? PeerPinChange; 
+    public event Func<BotOfflineEvent, Task>? BotOffline;
 
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
@@ -101,6 +103,15 @@ public class EventService : IEventService
                 break;
             case GroupFileUploadEvent groupFileUpload when GroupFileUpload is not null:
                 await GroupFileUpload(groupFileUpload);
+                break;
+            case GroupDisbandEvent groupDisband when GroupDisband is not null:
+                await GroupDisband(groupDisband);
+                break;
+            case PeerPinChangeEvent peerPinChange when PeerPinChange is not null:
+                await PeerPinChange(peerPinChange);
+                break;
+            case BotOfflineEvent botOffline when BotOffline is not null:
+                await BotOffline(botOffline);
                 break;
         }
     }
