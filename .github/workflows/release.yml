@@ -32,7 +32,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Publish
-        run: dotnet publish "$PROJECT_DIR" --configuration Release
+        run: dotnet publish "$PROJECT_DIR" --configuration Release --source https://api.nuget.org/v3/index.json
 
       - name: Collect Plugin DLL
         shell: bash
