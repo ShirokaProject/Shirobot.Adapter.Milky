@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ShiroBot.SDK.Abstractions;
 
@@ -64,12 +65,8 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
             if (bufferStream.Length > 0)
             {
-                bufferStream.Position = 0;
-                // Debug log the raw content for troubleshooting
-                // var bufferString = Encoding.UTF8.GetString(bufferStream.ToArray());
-                // BotLog.Info($"Received Raw WebSocket message: {bufferString}");
-                using var document = await JsonDocument.ParseAsync(bufferStream, cancellationToken: cancellationToken);
-                await PublishIfNotNullAsync(document.RootElement.Deserialize<Event>(JsonOptions));
+                var payload = Encoding.UTF8.GetString(bufferStream.ToArray());
+                await PublishIfNotNullAsync(DeserializeEvent(payload, "WebSocket"));
             }
 
             bufferStream.SetLength(0);
@@ -123,7 +120,11 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         await FlushSsePayloadAsync(payload);
     }
 
-    public async Task ReceivingEventUsingWebhookAsync(string webhookUrl, string? token, CancellationToken cancellationToken)
+    public async Task ReceivingEventUsingWebhookAsync(
+        string webhookUrl,
+        string? token,
+        CancellationToken cancellationToken,
+        TaskCompletionSource<bool>? started = null)
     {
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
@@ -132,7 +133,18 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
         using var listener = new HttpListener();
         listener.Prefixes.Add(NormalizeWebhookPrefix(webhookUrl));
-        listener.Start();
+        try
+        {
+            listener.Start();
+            started?.TrySetResult(true);
+        }
+        catch (Exception ex)
+        {
+            started?.TrySetException(ex);
+            throw;
+        }
+        using var cancellationRegistration = cancellationToken.Register(
+            static state => ((HttpListener)state!).Close(), listener);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -150,7 +162,18 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
                 break;
             }
 
-            await HandleWebhookAsync(context, token, cancellationToken);
+            try
+            {
+                await HandleWebhookAsync(context, token, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                BotLog.Error($"Milky Webhook 请求处理异常: {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 
@@ -170,15 +193,23 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
                 return;
             }
 
-            using var document = await JsonDocument.ParseAsync(context.Request.InputStream, cancellationToken: cancellationToken);
-            var data = document.RootElement.Deserialize<Event>(JsonOptions);
+            using var reader = new StreamReader(
+                context.Request.InputStream,
+                context.Request.ContentEncoding ?? Encoding.UTF8,
+                leaveOpen: true);
+            var payload = await reader.ReadToEndAsync(cancellationToken);
+            var data = DeserializeEvent(payload, "Webhook", out var error);
             if (data is null)
             {
-                await WriteResponseAsync(context.Response, HttpStatusCode.BadRequest, "Unknown Event", cancellationToken);
+                await WriteResponseAsync(
+                    context.Response,
+                    HttpStatusCode.BadRequest,
+                    $"Invalid Milky event: {error ?? "empty payload"}",
+                    cancellationToken);
                 return;
             }
 
-            await PublishAsync(data);
+            await PublishIfNotNullAsync(data);
             await WriteResponseAsync(context.Response, HttpStatusCode.OK, "OK", cancellationToken);
         }
         finally
@@ -194,24 +225,44 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
             return;
         }
 
-        var data = Deserialize(payload.ToString());
+        var data = DeserializeEvent(payload.ToString(), "SSE");
         payload.Clear();
         await PublishIfNotNullAsync(data);
     }
 
-    private static Event? Deserialize(string payload)
+    internal static Event? DeserializeEvent(string payload, string source) =>
+        DeserializeEvent(payload, source, out _);
+
+    internal static Event? DeserializeEvent(string payload, string source, out string? error)
     {
+        error = null;
         if (string.IsNullOrWhiteSpace(payload))
         {
+            error = "Milky event payload is empty.";
             return null;
         }
 
-        using var document = JsonDocument.Parse(payload);
-        return document.RootElement.Deserialize<Event>(JsonOptions);
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.Deserialize<Event>(JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            error = ex.Message;
+            BotLog.Warning($"忽略无法解析的 Milky {source} 事件: {ex.Message}");
+            return null;
+        }
     }
 
     private async Task PublishIfNotNullAsync(Event? data)
     {
+        if (data is UnknownMilkyEvent unknownEvent)
+        {
+            BotLog.Warning($"忽略未知 Milky 事件类型 '{unknownEvent.EventType}'。");
+            return;
+        }
+
         if (data is not null)
         {
             await PublishAsync(data);
@@ -267,23 +318,6 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
 internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegment>
 {
-    private static readonly Type[] DirectSegmentTypes =
-    [
-        typeof(TextIncomingSegment),
-        typeof(MentionIncomingSegment),
-        typeof(MentionAllIncomingSegment),
-        typeof(ReplyIncomingSegment),
-        typeof(FaceIncomingSegment),
-        typeof(MarketFaceIncomingSegment),
-        typeof(ImageIncomingSegment),
-        typeof(VideoIncomingSegment),
-        typeof(RecordIncomingSegment),
-        typeof(FileIncomingSegment),
-        typeof(ForwardIncomingSegment),
-        typeof(LightAppIncomingSegment),
-        typeof(XmlIncomingSegment)
-    ];
-
     private static readonly Dictionary<string, Type> WrappedSegmentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["text"] = typeof(TextIncomingSegment),
@@ -301,7 +335,8 @@ internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegme
         ["file"] = typeof(FileIncomingSegment),
         ["forward"] = typeof(ForwardIncomingSegment),
         ["light_app"] = typeof(LightAppIncomingSegment),
-        ["xml"] = typeof(XmlIncomingSegment)
+        ["xml"] = typeof(XmlIncomingSegment),
+        ["markdown"] = typeof(MarkdownIncomingSegment)
     };
 
     public override IncomingSegment Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -309,52 +344,36 @@ internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegme
         using var document = JsonDocument.ParseValue(ref reader);
         var element = document.RootElement;
 
-        if (TryReadWrappedSegment(element, options) is { } wrapped)
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty("type", out var typeElement) ||
+            typeElement.ValueKind != JsonValueKind.String)
         {
-            return wrapped;
+            return CreateUnknownSegment("<missing>");
         }
 
-        foreach (var segmentType in DirectSegmentTypes)
+        var segmentTypeName = typeElement.GetString();
+        if (string.IsNullOrWhiteSpace(segmentTypeName) ||
+            !WrappedSegmentTypes.TryGetValue(segmentTypeName, out var segmentType))
         {
-            if (TryDeserialize(element, segmentType, options) is IncomingSegment segment)
-            {
-                return segment;
-            }
+            return CreateUnknownSegment(segmentTypeName ?? "<empty>");
         }
 
-        throw new JsonException("Cannot determine incoming segment type.");
+        if (!element.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException($"Milky segment '{segmentTypeName}' missing object data.");
+        }
+
+        return dataElement.Deserialize(segmentType, options) as IncomingSegment
+               ?? throw new JsonException($"Cannot deserialize Milky segment '{segmentTypeName}' as {segmentType.Name}.");
     }
 
     public override void Write(Utf8JsonWriter writer, IncomingSegment value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
 
-    private static IncomingSegment? TryReadWrappedSegment(JsonElement element, JsonSerializerOptions options)
+    private static TextIncomingSegment CreateUnknownSegment(string segmentType)
     {
-        if (element.ValueKind != JsonValueKind.Object ||
-            !element.TryGetProperty("type", out var typeElement) ||
-            typeElement.ValueKind != JsonValueKind.String ||
-            !element.TryGetProperty("data", out var dataElement) ||
-            dataElement.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var type = typeElement.GetString();
-        return type is not null && WrappedSegmentTypes.TryGetValue(type, out var segmentType)
-            ? TryDeserialize(dataElement, segmentType, options) as IncomingSegment
-            : null;
-    }
-
-    private static object? TryDeserialize(JsonElement element, Type targetType, JsonSerializerOptions options)
-    {
-        try
-        {
-            return element.Deserialize(targetType, options);
-        }
-        catch
-        {
-            return null;
-        }
+        BotLog.Warning($"收到未知 Milky 消息段类型 '{segmentType}'，已转换为诊断文本。");
+        return new TextIncomingSegment($"[Unsupported Milky segment type: {segmentType}]");
     }
 }
 
@@ -373,6 +392,7 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
         ["group_essence_message_change"] = typeof(GroupEssenceMessageChangeEvent),
         ["group_member_increase"] = typeof(GroupMemberIncreaseEvent),
         ["group_member_decrease"] = typeof(GroupMemberDecreaseEvent),
+        ["group_disband"] = typeof(GroupDisbandEvent),
         ["group_name_change"] = typeof(GroupNameChangeEvent),
         ["group_message_reaction"] = typeof(GroupMessageReactionEvent),
         ["group_mute"] = typeof(GroupMuteEvent),
@@ -400,10 +420,6 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
             throw new JsonException("Milky event payload must be a JSON object.");
         }
 
-        var payload = root.TryGetProperty("data", out var dataElement) && dataElement.ValueKind == JsonValueKind.Object
-            ? dataElement
-            : root;
-
         var eventType = root.TryGetProperty("event_type", out var eventTypeElement) && eventTypeElement.ValueKind == JsonValueKind.String
             ? eventTypeElement.GetString()
             : null;
@@ -415,21 +431,23 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
 
         if (string.Equals(eventType, "message_receive", StringComparison.OrdinalIgnoreCase))
         {
-            return DeserializeMessageReceive(payload, options);
+            var payload = CreateRequiredEventPayload(root, eventType);
+            return DeserializeMessageReceive(root, payload, options);
         }
 
         if (EventTypes.TryGetValue(eventType, out var targetType))
         {
+            var payload = CreateRequiredEventPayload(root, eventType);
             return DeserializeRequired(payload, targetType, options, eventType);
         }
 
-        throw new JsonException($"Unsupported Milky event_type '{eventType}'.");
+        return new UnknownMilkyEvent(eventType, root.Clone());
     }
 
     public override void Write(Utf8JsonWriter writer, Event value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
 
-    private static Event DeserializeMessageReceive(JsonElement payload, JsonSerializerOptions options)
+    private static Event DeserializeMessageReceive(JsonElement root, JsonElement payload, JsonSerializerOptions options)
     {
         if (!payload.TryGetProperty("message_scene", out var sceneElement) ||
             sceneElement.ValueKind != JsonValueKind.String)
@@ -443,7 +461,32 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
             return DeserializeRequired(payload, targetType, options, $"message_receive/{scene}");
         }
 
-        throw new JsonException($"Unsupported message_scene '{scene}'.");
+        return new UnknownMilkyEvent($"message_receive/{scene ?? "<missing>"}", root.Clone());
+    }
+
+    private static JsonElement CreateRequiredEventPayload(JsonElement root, string eventType)
+    {
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException($"Milky event '{eventType}' missing object data.");
+        }
+
+        var merged = new JsonObject();
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!property.NameEquals("data") && !property.NameEquals("event_type"))
+            {
+                merged[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+            }
+        }
+
+        foreach (var property in data.EnumerateObject())
+        {
+            merged[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+        }
+
+        using var document = JsonDocument.Parse(merged.ToJsonString());
+        return document.RootElement.Clone();
     }
 
     private static Event DeserializeRequired(JsonElement payload, Type targetType, JsonSerializerOptions options, string eventType)
@@ -452,3 +495,5 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
         return result ?? throw new JsonException($"Cannot deserialize Milky event '{eventType}' as {targetType.Name}.");
     }
 }
+
+internal sealed record UnknownMilkyEvent(string EventType, JsonElement Payload) : Event;

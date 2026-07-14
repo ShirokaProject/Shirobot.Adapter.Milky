@@ -80,15 +80,16 @@ public class MilkyClient(HttpClient httpClient)
 
     private static TResponse DeserializeResponse<TResponse>(JsonElement json)
     {
+        if (MilkyResult.IsEnvelope(json))
+        {
+            var wrapped = json.Deserialize<MilkyResult>(JsonOptions)
+                          ?? throw new JsonException("Cannot deserialize the Milky response envelope.");
+            return wrapped.GetResult<TResponse>(JsonOptions);
+        }
+
         if (typeof(TResponse) == typeof(JsonElement) || typeof(TResponse) == typeof(JsonElement?))
         {
             return (TResponse)(object)json;
-        }
-
-        var wrapped = json.Deserialize<MilkyResult>(JsonOptions);
-        if (wrapped is not null && wrapped.HasPayload)
-        {
-            return wrapped.GetResult<TResponse>(JsonOptions);
         }
 
         var direct = json.Deserialize<TResponse>(JsonOptions);
@@ -121,12 +122,18 @@ internal sealed class SnakeCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         {
             if (reader.TryGetInt32(out var intValue))
             {
-                return (TEnum)Enum.ToObject(typeof(TEnum), intValue);
+                var value = (TEnum)Enum.ToObject(typeof(TEnum), intValue);
+                return Enum.IsDefined(value)
+                    ? value
+                    : throw new JsonException($"Unknown numeric value '{intValue}' for enum {typeof(TEnum).FullName}.");
             }
 
             if (reader.TryGetInt64(out var longValue))
             {
-                return (TEnum)Enum.ToObject(typeof(TEnum), longValue);
+                var value = (TEnum)Enum.ToObject(typeof(TEnum), longValue);
+                return Enum.IsDefined(value)
+                    ? value
+                    : throw new JsonException($"Unknown numeric value '{longValue}' for enum {typeof(TEnum).FullName}.");
             }
         }
 
@@ -135,12 +142,14 @@ internal sealed class SnakeCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         var raw = reader.GetString();
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return default;
+            throw new JsonException($"Cannot convert an empty JSON value to enum {typeof(TEnum).FullName}.");
         }
 
         if (Enum.TryParse<TEnum>(raw, true, out var direct))
         {
-            return direct;
+            return Enum.IsDefined(direct)
+                ? direct
+                : throw new JsonException($"Unknown value '{raw}' for enum {typeof(TEnum).FullName}.");
         }
 
         var normalized = NormalizeEnumToken(raw);
@@ -152,7 +161,7 @@ internal sealed class SnakeCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
             }
         }
 
-        throw new JsonException($"Cannot convert JSON value to enum {typeof(TEnum).FullName}.");
+        throw new JsonException($"Unknown value '{raw}' for enum {typeof(TEnum).FullName}.");
     }
 
     public override void Write(Utf8JsonWriter writer, TEnum value, JsonSerializerOptions options)
@@ -213,18 +222,27 @@ internal sealed class MilkyResult
     [JsonPropertyName("status")]
     public string? Status { get; init; }
 
-    public bool HasPayload => Data.ValueKind is not JsonValueKind.Undefined && Data.ValueKind is not JsonValueKind.Null;
+    public static bool IsEnvelope(JsonElement json) =>
+        json.ValueKind == JsonValueKind.Object &&
+        (json.TryGetProperty("retcode", out _) || json.TryGetProperty("status", out _));
 
     public T GetResult<T>(JsonSerializerOptions options)
     {
-        if (RetCode is > 0)
+        if (RetCode is not null and not 0 ||
+            !string.IsNullOrWhiteSpace(Status) && !string.Equals(Status, "ok", StringComparison.OrdinalIgnoreCase))
         {
-            throw new HttpRequestException($"Milky API business error: retcode={RetCode}, message={Message ?? "unknown"}");
+            throw new HttpRequestException(
+                $"Milky API business error: status={Status ?? "unknown"}, retcode={RetCode?.ToString() ?? "unknown"}, message={Message ?? "unknown"}");
         }
 
         if (typeof(T) == typeof(JsonElement) || typeof(T) == typeof(JsonElement?))
         {
             return (T)(object)Data;
+        }
+
+        if (Data.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            throw new JsonException($"Milky response envelope has no data for {typeof(T).FullName}.");
         }
 
         var result = Data.Deserialize<T>(options);

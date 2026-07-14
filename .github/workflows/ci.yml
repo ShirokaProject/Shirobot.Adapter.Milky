@@ -1,18 +1,10 @@
-name: Build Release
+name: Pull Request CI
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      tag_name:
-        description: "Release tag name, for example v1.0.0"
-        required: true
-        type: string
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_FILE: ShiroBot.MilkyAdapter.csproj
@@ -20,7 +12,7 @@ env:
   PUBLISH_DIR: artifacts/publish
 
 jobs:
-  publish:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -65,27 +57,13 @@ jobs:
           -p:UseLocalShiroBotSdk=false
           -p:CopyAdapterToHost=false
 
-      - name: Validate and collect plugin DLL
+      - name: Validate single-DLL package
         shell: bash
         run: |
           shopt -s nullglob
           dlls=("$PUBLISH_DIR"/*.dll)
-          if [ "${#dlls[@]}" -ne 1 ]; then
-            printf 'Expected exactly one DLL in %s, found %s\n' "$PUBLISH_DIR" "${#dlls[@]}"
+          if [ "${#dlls[@]}" -ne 1 ] || [ "${dlls[0]:-}" != "$PUBLISH_DIR/ShiroBot.MilkyAdapter.dll" ]; then
+            printf 'Expected only %s/ShiroBot.MilkyAdapter.dll\n' "$PUBLISH_DIR"
             printf '%s\n' "${dlls[@]}"
             exit 1
           fi
-          PLUGIN_DLL="$PUBLISH_DIR/ShiroBot.MilkyAdapter.dll"
-          if [ "${dlls[0]}" != "$PLUGIN_DLL" ]; then
-            printf 'Unexpected plugin DLL: %s\n' "${dlls[0]}"
-            exit 1
-          fi
-          mkdir -p release
-          cp "$PLUGIN_DLL" release/
-
-      - name: Upload DLL to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-          target_commitish: ${{ github.sha }}
-          files: release/*.dll

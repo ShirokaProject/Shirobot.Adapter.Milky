@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ShiroBot.MilkyAdapter.csproj" />
+  <Project Path="tests/ShiroBot.MilkyAdapter.Tests/ShiroBot.MilkyAdapter.Tests.csproj" />
+</Solution>

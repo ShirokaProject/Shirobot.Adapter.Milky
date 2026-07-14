@@ -43,76 +43,89 @@ public class EventService : IEventService
         _attached = true;
     }
 
-    private async Task OnEventReceivedAsync(Event e)
+    internal async Task OnEventReceivedAsync(Event e)
     {
         switch (e)
         {
-            case GroupIncomingMessage groupMessage when GroupMessageReceived is not null:
-                await GroupMessageReceived(groupMessage);
+            case GroupIncomingMessage groupMessage:
+                await InvokeSubscribersAsync(GroupMessageReceived, groupMessage);
                 break;
-            case FriendIncomingMessage friendMessage when FriendMessageReceived is not null:
-                await FriendMessageReceived(friendMessage);
+            case FriendIncomingMessage friendMessage:
+                await InvokeSubscribersAsync(FriendMessageReceived, friendMessage);
                 break;
-            case MessageRecallEvent messageRecall when MessageRecall is not null:
-                await MessageRecall(messageRecall);
+            case MessageRecallEvent messageRecall:
+                await InvokeSubscribersAsync(MessageRecall, messageRecall);
                 break;
-            case FriendRequestEvent friendRequest when FriendRequest is not null:
-                await FriendRequest(friendRequest);
+            case FriendRequestEvent friendRequest:
+                await InvokeSubscribersAsync(FriendRequest, friendRequest);
                 break;
-            case GroupJoinRequestEvent groupJoinRequest when GroupJoinRequest is not null:
-                await GroupJoinRequest(groupJoinRequest);
+            case GroupJoinRequestEvent groupJoinRequest:
+                await InvokeSubscribersAsync(GroupJoinRequest, groupJoinRequest);
                 break;
-            case GroupInvitedJoinRequestEvent invitedJoinRequest when GroupInvitedJoinRequest is not null:
-                await GroupInvitedJoinRequest(invitedJoinRequest);
+            case GroupInvitedJoinRequestEvent invitedJoinRequest:
+                await InvokeSubscribersAsync(GroupInvitedJoinRequest, invitedJoinRequest);
                 break;
-            case GroupInvitationEvent groupInvitation when GroupInvitation is not null:
-                await GroupInvitation(groupInvitation);
+            case GroupInvitationEvent groupInvitation:
+                await InvokeSubscribersAsync(GroupInvitation, groupInvitation);
                 break;
-            case FriendNudgeEvent friendNudge when FriendNudge is not null:
-                await FriendNudge(friendNudge);
+            case FriendNudgeEvent friendNudge:
+                await InvokeSubscribersAsync(FriendNudge, friendNudge);
                 break;
-            case FriendFileUploadEvent friendFileUpload when FriendFileUpload is not null:
-                await FriendFileUpload(friendFileUpload);
+            case FriendFileUploadEvent friendFileUpload:
+                await InvokeSubscribersAsync(FriendFileUpload, friendFileUpload);
                 break;
-            case GroupAdminChangeEvent adminChange when GroupAdminChange is not null:
-                await GroupAdminChange(adminChange);
+            case GroupAdminChangeEvent adminChange:
+                await InvokeSubscribersAsync(GroupAdminChange, adminChange);
                 break;
-            case GroupEssenceMessageChangeEvent essenceChange when GroupEssenceMessageChange is not null:
-                await GroupEssenceMessageChange(essenceChange);
+            case GroupEssenceMessageChangeEvent essenceChange:
+                await InvokeSubscribersAsync(GroupEssenceMessageChange, essenceChange);
                 break;
-            case GroupMemberIncreaseEvent memberIncrease when GroupMemberIncrease is not null:
-                await GroupMemberIncrease(memberIncrease);
+            case GroupMemberIncreaseEvent memberIncrease:
+                await InvokeSubscribersAsync(GroupMemberIncrease, memberIncrease);
                 break;
-            case GroupMemberDecreaseEvent memberDecrease when GroupMemberDecrease is not null:
-                await GroupMemberDecrease(memberDecrease);
+            case GroupMemberDecreaseEvent memberDecrease:
+                await InvokeSubscribersAsync(GroupMemberDecrease, memberDecrease);
                 break;
-            case GroupNameChangeEvent nameChange when GroupNameChange is not null:
-                await GroupNameChange(nameChange);
+            case GroupNameChangeEvent nameChange:
+                await InvokeSubscribersAsync(GroupNameChange, nameChange);
                 break;
-            case GroupMessageReactionEvent reactionEvent when GroupMessageReaction is not null:
-                await GroupMessageReaction(reactionEvent);
+            case GroupMessageReactionEvent reactionEvent:
+                await InvokeSubscribersAsync(GroupMessageReaction, reactionEvent);
                 break;
-            case GroupMuteEvent muteEvent when GroupMute is not null:
-                await GroupMute(muteEvent);
+            case GroupMuteEvent muteEvent:
+                await InvokeSubscribersAsync(GroupMute, muteEvent);
                 break;
-            case GroupWholeMuteEvent wholeMuteEvent when GroupWholeMute is not null:
-                await GroupWholeMute(wholeMuteEvent);
+            case GroupWholeMuteEvent wholeMuteEvent:
+                await InvokeSubscribersAsync(GroupWholeMute, wholeMuteEvent);
                 break;
-            case GroupNudgeEvent groupNudge when GroupNudge is not null:
-                await GroupNudge(groupNudge);
+            case GroupNudgeEvent groupNudge:
+                await InvokeSubscribersAsync(GroupNudge, groupNudge);
                 break;
-            case GroupFileUploadEvent groupFileUpload when GroupFileUpload is not null:
-                await GroupFileUpload(groupFileUpload);
+            case GroupFileUploadEvent groupFileUpload:
+                await InvokeSubscribersAsync(GroupFileUpload, groupFileUpload);
                 break;
-            case GroupDisbandEvent groupDisband when GroupDisband is not null:
-                await GroupDisband(groupDisband);
+            case GroupDisbandEvent groupDisband:
+                await InvokeSubscribersAsync(GroupDisband, groupDisband);
                 break;
-            case PeerPinChangeEvent peerPinChange when PeerPinChange is not null:
-                await PeerPinChange(peerPinChange);
+            case PeerPinChangeEvent peerPinChange:
+                await InvokeSubscribersAsync(PeerPinChange, peerPinChange);
                 break;
-            case BotOfflineEvent botOffline when BotOffline is not null:
-                await BotOffline(botOffline);
+            case BotOfflineEvent botOffline:
+                await InvokeSubscribersAsync(BotOffline, botOffline);
                 break;
+        }
+    }
+
+    private static async Task InvokeSubscribersAsync<TEvent>(Func<TEvent, Task>? handlers, TEvent data)
+    {
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var subscriber in handlers.GetInvocationList().Cast<Func<TEvent, Task>>())
+        {
+            await subscriber(data);
         }
     }
 }
