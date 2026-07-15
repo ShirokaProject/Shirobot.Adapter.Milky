@@ -8,18 +8,10 @@
         <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
         <HostAdapterDir>..\ShiroBot\bin\Debug\$(TargetFramework)\adapters\$(AssemblyName)\</HostAdapterDir>
         <Configurations>Debug;Release</Configurations>
-        <UseLocalShiroBotSdk Condition="'$(UseLocalShiroBotSdk)' == '' and Exists('../ShiroBot/ShiroBot.SDK/ShiroBot.SDK.csproj')">true</UseLocalShiroBotSdk>
-        <UseLocalShiroBotSdk Condition="'$(UseLocalShiroBotSdk)' == ''">false</UseLocalShiroBotSdk>
-        <ShiroBotSdkVersion Condition="'$(ShiroBotSdkVersion)' == ''">0.7.0</ShiroBotSdkVersion>
-        <DefaultItemExcludes>$(DefaultItemExcludes);shirobot-core/**</DefaultItemExcludes>
     </PropertyGroup>
 
-    <ItemGroup Condition="'$(UseLocalShiroBotSdk)' == 'true'">
-        <ProjectReference Include="../ShiroBot/ShiroBot.SDK/ShiroBot.SDK.csproj" />
-    </ItemGroup>
-
-    <ItemGroup Condition="'$(UseLocalShiroBotSdk)' != 'true'">
-        <PackageReference Include="ShiroBot.SDK" Version="$(ShiroBotSdkVersion)" />
+    <ItemGroup>
+        <PackageReference Include="ShiroBot.SDK" Version="0.7.1" />
     </ItemGroup>
 
     <ItemGroup>
