@@ -32,13 +32,6 @@ internal static class MilkyJson
 
 internal sealed class IncomingMessageJsonConverter : JsonConverter<IncomingMessage>
 {
-    private static readonly Dictionary<string, Type> MessageSceneTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["group"] = typeof(GroupIncomingMessage),
-        ["friend"] = typeof(FriendIncomingMessage),
-        ["temp"] = typeof(TempIncomingMessage)
-    };
-
     public override IncomingMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
@@ -56,7 +49,7 @@ internal sealed class IncomingMessageJsonConverter : JsonConverter<IncomingMessa
         }
 
         var scene = sceneElement.GetString();
-        if (scene is null || !MessageSceneTypes.TryGetValue(scene, out var targetType))
+        if (scene is null || !EventMetadataRegistry.TryGetIncomingMessageType(scene, out var targetType))
         {
             throw new JsonException($"Unsupported message_scene '{scene}'.");
         }

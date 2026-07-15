@@ -25,7 +25,6 @@ public class MilkyAdapter : IBotAdapter
     private static readonly Version MinimumMilkyVersion = new(1, 2, 0);
     private static readonly Version FirstUntestedMilkyVersion = new(1, 4, 0);
 
-    public string Name => "MilkyAdapter";
     private readonly EventService _eventService = new();
 
     public IFileService File { get; } = new FileService();

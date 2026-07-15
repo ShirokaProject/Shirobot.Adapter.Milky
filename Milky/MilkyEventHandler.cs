@@ -379,37 +379,6 @@ internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegme
 
 internal sealed class EventJsonConverter : JsonConverter<Event>
 {
-    private static readonly Dictionary<string, Type> EventTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["message_recall"] = typeof(MessageRecallEvent),
-        ["friend_request"] = typeof(FriendRequestEvent),
-        ["group_join_request"] = typeof(GroupJoinRequestEvent),
-        ["group_invited_join_request"] = typeof(GroupInvitedJoinRequestEvent),
-        ["group_invitation"] = typeof(GroupInvitationEvent),
-        ["friend_nudge"] = typeof(FriendNudgeEvent),
-        ["friend_file_upload"] = typeof(FriendFileUploadEvent),
-        ["group_admin_change"] = typeof(GroupAdminChangeEvent),
-        ["group_essence_message_change"] = typeof(GroupEssenceMessageChangeEvent),
-        ["group_member_increase"] = typeof(GroupMemberIncreaseEvent),
-        ["group_member_decrease"] = typeof(GroupMemberDecreaseEvent),
-        ["group_disband"] = typeof(GroupDisbandEvent),
-        ["group_name_change"] = typeof(GroupNameChangeEvent),
-        ["group_message_reaction"] = typeof(GroupMessageReactionEvent),
-        ["group_mute"] = typeof(GroupMuteEvent),
-        ["group_whole_mute"] = typeof(GroupWholeMuteEvent),
-        ["group_nudge"] = typeof(GroupNudgeEvent),
-        ["group_file_upload"] = typeof(GroupFileUploadEvent),
-        ["bot_offline"] = typeof(BotOfflineEvent),
-        ["peer_pin_change"] = typeof(PeerPinChangeEvent)
-    };
-
-    private static readonly Dictionary<string, Type> MessageSceneTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["group"] = typeof(GroupIncomingMessage),
-        ["friend"] = typeof(FriendIncomingMessage),
-        ["temp"] = typeof(TempIncomingMessage)
-    };
-
     public override Event Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         using var document = JsonDocument.ParseValue(ref reader);
@@ -429,13 +398,7 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
             throw new JsonException("Milky event payload missing event_type.");
         }
 
-        if (string.Equals(eventType, "message_receive", StringComparison.OrdinalIgnoreCase))
-        {
-            var payload = CreateRequiredEventPayload(root, eventType);
-            return DeserializeMessageReceive(root, payload, options);
-        }
-
-        if (EventTypes.TryGetValue(eventType, out var targetType))
+        if (EventMetadataRegistry.TryGetEventType(eventType, out var targetType))
         {
             var payload = CreateRequiredEventPayload(root, eventType);
             return DeserializeRequired(payload, targetType, options, eventType);
@@ -446,23 +409,6 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
 
     public override void Write(Utf8JsonWriter writer, Event value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(writer, value, value.GetType(), options);
-
-    private static Event DeserializeMessageReceive(JsonElement root, JsonElement payload, JsonSerializerOptions options)
-    {
-        if (!payload.TryGetProperty("message_scene", out var sceneElement) ||
-            sceneElement.ValueKind != JsonValueKind.String)
-        {
-            throw new JsonException("message_receive event missing message_scene.");
-        }
-
-        var scene = sceneElement.GetString();
-        if (scene is not null && MessageSceneTypes.TryGetValue(scene, out var targetType))
-        {
-            return DeserializeRequired(payload, targetType, options, $"message_receive/{scene}");
-        }
-
-        return new UnknownMilkyEvent($"message_receive/{scene ?? "<missing>"}", root.Clone());
-    }
 
     private static JsonElement CreateRequiredEventPayload(JsonElement root, string eventType)
     {

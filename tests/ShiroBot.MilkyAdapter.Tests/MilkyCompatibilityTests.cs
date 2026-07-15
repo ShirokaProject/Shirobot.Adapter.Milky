@@ -61,6 +61,39 @@ public sealed class MilkyCompatibilityTests
     }
 
     [Fact]
+    public async Task Temp_message_uses_generated_registry_and_reaches_unified_event_stream()
+    {
+        const string json = """
+                            {
+                              "event_type":"message_receive",
+                              "time":100,
+                              "self_id":200,
+                              "data":{
+                                "message_scene":"temp",
+                                "peer_id":300,
+                                "message_seq":400,
+                                "sender_id":500,
+                                "segments":[]
+                              }
+                            }
+                            """;
+        var value = JsonSerializer.Deserialize<Event>(json, MilkyJson.JsonOptions);
+        var tempMessage = Assert.IsType<TempIncomingMessage>(value);
+        var service = new EventService();
+        Event? received = null;
+        service.EventReceived += message =>
+        {
+            received = message;
+            return Task.CompletedTask;
+        };
+
+        await service.OnEventReceivedAsync(tempMessage);
+
+        Assert.Same(tempMessage, received);
+        Assert.Equal(300, tempMessage.PeerId);
+    }
+
+    [Fact]
     public async Task Error_envelope_with_data_throws()
     {
         var client = CreateClient("""
@@ -330,7 +363,7 @@ public sealed class MilkyCompatibilityTests
     }
 
     [Fact]
-    public async Task Event_service_awaits_each_multicast_subscriber()
+    public async Task Unified_event_service_awaits_each_multicast_subscriber()
     {
         var service = new EventService();
         var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -338,12 +371,12 @@ public sealed class MilkyCompatibilityTests
         var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        service.MessageRecall += async _ =>
+        service.EventReceived += async _ =>
         {
             firstStarted.SetResult();
             await firstRelease.Task;
         };
-        service.MessageRecall += async _ =>
+        service.EventReceived += async _ =>
         {
             secondStarted.SetResult();
             await secondRelease.Task;

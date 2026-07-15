@@ -10,7 +10,8 @@
         <Configurations>Debug;Release</Configurations>
         <UseLocalShiroBotSdk Condition="'$(UseLocalShiroBotSdk)' == '' and Exists('../ShiroBot/ShiroBot.SDK/ShiroBot.SDK.csproj')">true</UseLocalShiroBotSdk>
         <UseLocalShiroBotSdk Condition="'$(UseLocalShiroBotSdk)' == ''">false</UseLocalShiroBotSdk>
-        <ShiroBotSdkVersion Condition="'$(ShiroBotSdkVersion)' == ''">0.7.0-rc3</ShiroBotSdkVersion>
+        <ShiroBotSdkVersion Condition="'$(ShiroBotSdkVersion)' == ''">0.7.0</ShiroBotSdkVersion>
+        <DefaultItemExcludes>$(DefaultItemExcludes);shirobot-core/**</DefaultItemExcludes>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(UseLocalShiroBotSdk)' == 'true'">
