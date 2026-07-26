@@ -17,6 +17,10 @@
 
         <!-- 平台抽象重构期间使用本地 ProjectReference,发布前切回 PackageReference -->
         <ProjectReference Include="..\ShiroBot\ShiroBot.Model\ShiroBot.Model.csproj" />
+        <!-- Qq.Model 由宿主共享(Default ALC),适配器只做编译期引用 -->
+        <ProjectReference Include="..\ShiroBot\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj">
+            <Private>false</Private>
+        </ProjectReference>
         <ProjectReference Include="..\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj">
             <Private>false</Private>
         </ProjectReference>
@@ -59,7 +63,7 @@
 
         <ItemGroup>
             <AdapterDebugOutput Include="$(TargetDir)**\*"
-                                Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb" />
+                                Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Qq.Model.dll;$(TargetDir)ShiroBot.Qq.Model.pdb" />
         </ItemGroup>
 
         <Copy SourceFiles="@(AdapterDebugOutput)"

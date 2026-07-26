@@ -26,18 +26,25 @@ public class MilkyAdapter : IBotAdapter
     public IConfigContext Config { get; set; } = null!;
     public IConsoleLogger Logger { get; set; } = null!;
 
-    // ─── QQ 平台扩展服务(插件通过 context.GetAdapterExtension<T>() 探测) ───
-    private readonly FriendService _friendExtension = new();
-    private readonly GroupService _groupExtension = new();
+    // ─── QQ 平台扩展服务(插件通过 context.GetAdapterExtension<IQqXxxApi>() 探测) ───
+    // 通用 QQ 契约(ShiroBot.Qq.Model)实现,插件应优先使用这些接口
+    private readonly QqFriendApi _qqFriendApi = new();
+    private readonly QqGroupApi _qqGroupApi = new();
+    private readonly QqFileApi _qqFileApi = new();
+    private readonly QqSystemApi _qqSystemApi = new();
+    private readonly QqMessageApi _qqMessageApi = new();
+
+    // Milky 原生服务(仅适配器内部/需要 Milky 专有 API 时使用)
     private readonly SystemService _systemExtension = new();
-    private readonly FileService _fileExtension = new();
 
     public TService? GetExtension<TService>() where TService : class =>
         this as TService
-        ?? _friendExtension as TService
-        ?? _groupExtension as TService
-        ?? _systemExtension as TService
-        ?? _fileExtension as TService;
+        ?? _qqFriendApi as TService
+        ?? _qqGroupApi as TService
+        ?? _qqFileApi as TService
+        ?? _qqSystemApi as TService
+        ?? _qqMessageApi as TService
+        ?? _systemExtension as TService;
 
     private CancellationTokenSource? _eventTokenSource;
 

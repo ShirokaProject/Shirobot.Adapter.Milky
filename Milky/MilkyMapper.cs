@@ -1,3 +1,4 @@
+using ShiroBot.Qq.Model;
 using ShiroBot.SDK.Models;
 using Sdk = ShiroBot.SDK.Models;
 using Mk = ShiroBot.Model.Common;
@@ -54,7 +55,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = friend,
+            Raw = QqModelMapper.ToQq(friend),
             MessageId = friend.MessageSeq.ToString(),
             Channel = DirectChannel(friend.PeerId),
             Sender = ToUser(friend.Friend),
@@ -65,7 +66,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = group,
+            Raw = QqModelMapper.ToQq(group),
             MessageId = group.MessageSeq.ToString(),
             Channel = ToChannel(group.Group),
             Sender = ToUser(group.GroupMember),
@@ -77,7 +78,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = temp,
+            Raw = QqModelMapper.ToQq(temp),
             MessageId = temp.MessageSeq.ToString(),
             Channel = TempChannel(temp.PeerId, temp.Group?.GroupId),
             Sender = new Sdk.User(temp.SenderId.ToString()),
@@ -116,7 +117,7 @@ internal static class MilkyMapper
             FileName = file.FileName,
             FileSize = file.FileSize
         },
-        _ => new RawSegment(PlatformId, GetRawSegmentKind(segment), segment)
+        _ => new RawSegment(PlatformId, GetRawSegmentKind(segment), QqModelMapper.ToQq(segment))
     };
 
     private static string GetRawSegmentKind(Mk.IncomingSegment segment) => segment switch
@@ -144,9 +145,10 @@ internal static class MilkyMapper
         ImageSegment image => new Mk.ImageOutgoingSegment(image.Uri) { Summary = image.Summary },
         AudioSegment audio => new Mk.RecordOutgoingSegment(audio.Uri),
         VideoSegment video => new Mk.VideoOutgoingSegment(video.Uri),
+        RawSegment { Payload: QqOutgoingSegment qqOutgoing } => QqModelMapper.ToMilky(qqOutgoing),
         RawSegment { Payload: Mk.OutgoingSegment outgoing } => outgoing,
         RawSegment raw => throw new NotSupportedException(
-            $"RawSegment(kind={raw.Kind}) 的 Payload 必须是 Milky OutgoingSegment,实际为 {raw.Payload?.GetType().Name ?? "null"}。"),
+            $"RawSegment(kind={raw.Kind}) 的 Payload 必须是 QqOutgoingSegment,实际为 {raw.Payload?.GetType().Name ?? "null"}。"),
         _ => throw new NotSupportedException($"Milky 适配器不支持发送 {segment.GetType().Name}。")
     };
 
@@ -218,12 +220,12 @@ internal static class MilkyMapper
             Reason = offline.Reason
         },
 
-        // 其余 QQ 特有事件统一走 PlatformEvent,插件按 Kind 订阅并读取 Raw
+        // 其余 QQ 特有事件统一走 PlatformEvent,Raw 为通用 QQ 模型负载(ShiroBot.Qq.Model)
         _ => new PlatformEvent
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = e,
+            Raw = (object?)QqModelMapper.ToQqEventPayload(e) ?? e,
             Kind = GetPlatformEventKind(e),
             Channel = GetPlatformEventChannel(e)
         }
