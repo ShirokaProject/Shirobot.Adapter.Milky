@@ -144,7 +144,7 @@ internal static class MilkyMapper
         EmojiSegment emoji => new Mk.FaceOutgoingSegment(emoji.Id),
         ImageSegment image => new Mk.ImageOutgoingSegment(image.Uri) { Summary = image.Summary },
         AudioSegment audio => new Mk.RecordOutgoingSegment(audio.Uri),
-        VideoSegment video => new Mk.VideoOutgoingSegment(video.Uri),
+        VideoSegment video => new Mk.VideoOutgoingSegment(video.Uri, video.ThumbnailUri),
         RawSegment { Payload: QqOutgoingSegment qqOutgoing } => QqModelMapper.ToMilky(qqOutgoing),
         RawSegment { Payload: Mk.OutgoingSegment outgoing } => outgoing,
         RawSegment raw => throw new NotSupportedException(
