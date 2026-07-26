@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-        <HostAdapterDir>..\ShiroBot\bin\Debug\$(TargetFramework)\adapters\$(AssemblyName)\</HostAdapterDir>
+        <HostAdapterDir>..\ShiroBot\ShiroBot\bin\Debug\$(TargetFramework)\adapters\$(AssemblyName)\</HostAdapterDir>
         <Configurations>Debug;Release</Configurations>
     </PropertyGroup>
 
