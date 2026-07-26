@@ -1,11 +1,10 @@
 using ShiroBot.MilkyAdapter.Milky;
 using ShiroBot.Model.Friend.Requests;
 using ShiroBot.Model.Friend.Responses;
-using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
 
-public class FriendService : IFriendService
+public class FriendService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 

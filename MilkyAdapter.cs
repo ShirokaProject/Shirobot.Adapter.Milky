@@ -8,26 +8,36 @@ using ShiroBot.SDK.Plugin;
 
 namespace ShiroBot.MilkyAdapter;
 
+[BotAdapter("milky",
+    Name = "MilkyAdapter",
+    Version = "2.0.0",
+    Description = "Milky (QQ NT) adapter for ShiroBot",
+    Protocol = "milky")]
 public class MilkyAdapter : IBotAdapter
 {
-    public string Name => "MilkyAdapter";
-    public BotComponentMetadata Metadata { get; } = new()
-    {
-        Name = "MilkyAdapter",
-        Version = "1.2.3",
-        Description = "Milky Adapter for ShiroBot"
-    };
-
     private readonly EventService _eventService = new();
 
-    public IFileService File { get; } = new FileService();
-    public IFriendService Friend { get; } = new FriendService();
-    public IGroupService Group { get; } = new GroupService();
-    public IMessageService Message { get; } = new MessageService();
-    public ISystemService System { get; } = new SystemService();
+    public string Platform => MilkyMapper.PlatformId;
+
+    public IMessageService Message { get; } = new CoreMessageService();
+    public IChannelService Channel { get; } = new CoreChannelService();
+    public IUserService User { get; } = new CoreUserService();
     public IEventService Event => _eventService;
     public IConfigContext Config { get; set; } = null!;
     public IConsoleLogger Logger { get; set; } = null!;
+
+    // ─── QQ 平台扩展服务(插件通过 context.GetAdapterExtension<T>() 探测) ───
+    private readonly FriendService _friendExtension = new();
+    private readonly GroupService _groupExtension = new();
+    private readonly SystemService _systemExtension = new();
+    private readonly FileService _fileExtension = new();
+
+    public TService? GetExtension<TService>() where TService : class =>
+        this as TService
+        ?? _friendExtension as TService
+        ?? _groupExtension as TService
+        ?? _systemExtension as TService
+        ?? _fileExtension as TService;
 
     private CancellationTokenSource? _eventTokenSource;
 
@@ -40,12 +50,13 @@ public class MilkyAdapter : IBotAdapter
         MilkyClientManager.Initialize(config.BaseUrl, config.AccessToken);
         var milky = MilkyClientManager.Instance;
         _eventService.AttachEvent();
-        
+
         Logger.Info("开始连接 Milky...");
         try
         {
-            var loginInfo = await System.GetLoginInfoAsync();
-            var result = await System.GetImplInfoAsync();
+            var loginInfo = await _systemExtension.GetLoginInfoAsync();
+            MilkySession.SelfId = loginInfo.Uin.ToString();
+            var result = await _systemExtension.GetImplInfoAsync();
             Logger.Success($"Milky 登录成功 - Nickname: {loginInfo.Nickname},Milky Impl: {result.ImplName} {result.ImplVersion}");
         }
         catch (Exception)
@@ -58,71 +69,17 @@ public class MilkyAdapter : IBotAdapter
         {
             case "sse":
                 _eventTokenSource = new CancellationTokenSource();
-                _ = Task.Run(async () =>
-                {
-                    var retryCount = 0;
-                    while (!_eventTokenSource.Token.IsCancellationRequested)
-                    {
-                        try
-                        {
-                            retryCount++;
-                            Logger.Info($"正在尝试连接 SSE 事件流，第 {retryCount} 次。");
-                            await milky.Events.ReceivingEventUsingSseAsync(_eventTokenSource.Token);
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            Logger.Warning("SSE 事件接收已取消。");
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"SSE 事件接收异常: {ex.GetType().Name}: {ex.Message}");
-                            Logger.Error(ex.ToString());
-                            try
-                            {
-                                await Task.Delay(TimeSpan.FromSeconds(5), _eventTokenSource.Token);
-                            }
-                            catch (TaskCanceledException)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                });
+                _ = Task.Run(() => RunEventLoopAsync(
+                    "SSE",
+                    token => milky.Events.ReceivingEventUsingSseAsync(token),
+                    _eventTokenSource.Token));
                 break;
             case "ws":
                 _eventTokenSource = new CancellationTokenSource();
-                _ = Task.Run(async () =>
-                {
-                    var retryCount = 0;
-                    while (!_eventTokenSource.Token.IsCancellationRequested)
-                    {
-                        try
-                        {
-                            retryCount++;
-                            Logger.Info($"正在尝试连接 WebSocket 事件流，第 {retryCount} 次。");
-                            await milky.Events.ReceivingEventUsingWebSocketAsync(_eventTokenSource.Token);
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            Logger.Warning("WebSocket 事件接收已取消。");
-                            break;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"WebSocket 事件接收异常: {ex.GetType().Name}: {ex.Message}");
-                            Logger.Error(ex.ToString());
-                            try
-                            {
-                                await Task.Delay(TimeSpan.FromSeconds(5), _eventTokenSource.Token);
-                            }
-                            catch (TaskCanceledException)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                });
+                _ = Task.Run(() => RunEventLoopAsync(
+                    "WebSocket",
+                    token => milky.Events.ReceivingEventUsingWebSocketAsync(token),
+                    _eventTokenSource.Token));
                 break;
             case "webhook":
                 if (string.IsNullOrWhiteSpace(config.WebhookUrl))
@@ -152,8 +109,49 @@ public class MilkyAdapter : IBotAdapter
                 });
                 break;
             default:
-                BotLog.Error("请配置正确的协议,支持的协议有Sse,WebSocket");
+                BotLog.Error("请配置正确的协议,支持的协议有Sse,WebSocket,Webhook");
                 throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    public Task StopAsync()
+    {
+        _eventTokenSource?.Cancel();
+        return Task.CompletedTask;
+    }
+
+    private async Task RunEventLoopAsync(
+        string transportName,
+        Func<CancellationToken, Task> receive,
+        CancellationToken token)
+    {
+        var retryCount = 0;
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                retryCount++;
+                Logger.Info($"正在尝试连接 {transportName} 事件流，第 {retryCount} 次。");
+                await receive(token);
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Warning($"{transportName} 事件接收已取消。");
+                break;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"{transportName} 事件接收异常: {ex.GetType().Name}: {ex.Message}");
+                Logger.Error(ex.ToString());
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), token);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
         }
     }
 }

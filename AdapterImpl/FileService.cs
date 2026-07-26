@@ -1,11 +1,10 @@
 using ShiroBot.MilkyAdapter.Milky;
 using ShiroBot.Model.File.Requests;
 using ShiroBot.Model.File.Responses;
-using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
 
-public class FileService : IFileService
+public class FileService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 

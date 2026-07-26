@@ -15,8 +15,11 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-        <PackageReference Include="ShiroBot.Model" Version="1.3.0-rc1" />
-        <PackageReference Include="ShiroBot.SDK" Version="0.6.0-rc1" />
+        <!-- 平台抽象重构期间使用本地 ProjectReference,发布前切回 PackageReference -->
+        <ProjectReference Include="..\ShiroBot\ShiroBot.Model\ShiroBot.Model.csproj" />
+        <ProjectReference Include="..\ShiroBot\ShiroBot.SDK\ShiroBot.SDK.csproj">
+            <Private>false</Private>
+        </ProjectReference>
     </ItemGroup>
 
     <Target Name="RepackAdapter" AfterTargets="Publish" Condition="'$(Configuration)'=='Release'">
@@ -29,7 +32,6 @@
             <RepackDependency Include="$(PublishDir)*.dll"
                               Exclude="$(PublishDir)$(AssemblyName).dll;
                                        $(PublishDir)ShiroBot.SDK.dll;
-                                       $(PublishDir)ShiroBot.Model.dll;
                                        $(PublishDir)System*.dll;
                                        $(PublishDir)Microsoft*.dll;
                                        $(PublishDir)mscorlib.dll;
@@ -57,7 +59,7 @@
 
         <ItemGroup>
             <AdapterDebugOutput Include="$(TargetDir)**\*"
-                                Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.dll;$(TargetDir)ShiroBot.Model.pdb" />
+                                Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb" />
         </ItemGroup>
 
         <Copy SourceFiles="@(AdapterDebugOutput)"

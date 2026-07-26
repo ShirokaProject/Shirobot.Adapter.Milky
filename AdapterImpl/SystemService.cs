@@ -1,11 +1,10 @@
 using ShiroBot.MilkyAdapter.Milky;
 using ShiroBot.Model.System.Requests;
 using ShiroBot.Model.System.Responses;
-using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
 
-public class SystemService : ISystemService
+public class SystemService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 

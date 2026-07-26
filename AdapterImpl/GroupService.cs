@@ -1,11 +1,10 @@
 using ShiroBot.MilkyAdapter.Milky;
 using ShiroBot.Model.Group.Requests;
 using ShiroBot.Model.Group.Responses;
-using ShiroBot.SDK.Adapter;
 
 namespace ShiroBot.MilkyAdapter.AdapterImpl;
 
-public class GroupService : IGroupService
+public class GroupService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
