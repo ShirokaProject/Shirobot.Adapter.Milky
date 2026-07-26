@@ -10,13 +10,19 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- 子项目目录不参与适配器本体编译 -->
+        <Compile Remove="ShiroBot.Model/**/*.cs" />
+        <Compile Remove="MilkyModelGenerator.Net/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-        <!-- 平台抽象重构期间使用本地 ProjectReference,发布前切回 PackageReference -->
-        <ProjectReference Include="..\ShiroBot\ShiroBot.Model\ShiroBot.Model.csproj" />
+        <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成) -->
+        <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
         <!-- Qq.Model 由宿主共享(Default ALC),适配器只做编译期引用 -->
         <ProjectReference Include="..\ShiroBot\ShiroBot.Qq.Model\ShiroBot.Qq.Model.csproj">
             <Private>false</Private>
