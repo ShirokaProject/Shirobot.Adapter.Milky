@@ -194,6 +194,7 @@ public sealed class QqFileApi : IQqFileApi
                 ParentFolderId = folder.ParentFolderId,
                 FolderName = folder.FolderName,
                 CreatedTime = DateTimeOffset.FromUnixTimeSeconds(folder.CreatedTime),
+                LastModifiedTime = DateTimeOffset.FromUnixTimeSeconds(folder.LastModifiedTime),
                 CreatorId = folder.CreatorId,
                 FileCount = folder.FileCount
             })
