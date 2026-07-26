@@ -173,13 +173,15 @@ internal static class QqModelMapper
                 : Mk.ImageOutgoingSegmentSubType.Normal,
             image.Summary),
         QqRecordOutgoing record => new Mk.RecordOutgoingSegment(record.Uri),
+        QqLightAppOutgoing lightApp => new Mk.LightAppOutgoingSegment(lightApp.JsonPayload),
         QqVideoOutgoing video => new Mk.VideoOutgoingSegment(video.Uri, video.ThumbUri),
         QqForwardOutgoing forward => new Mk.ForwardOutgoingSegment(
             forward.Messages
                 .Select(message => new Mk.OutgoingForwardedMessage(
                     message.UserId,
                     message.SenderName,
-                    message.Segments.Select(ToMilky).ToArray()))
+                    message.Segments.Select(ToMilky).ToArray(),
+                    message.Time?.ToUnixTimeSeconds()))
                 .ToArray(),
             forward.Title,
             forward.Preview,

@@ -2,6 +2,7 @@ using ShiroBot.MilkyAdapter.Milky;
 using ShiroBot.Model.File.Requests;
 using ShiroBot.Model.File.Responses;
 using ShiroBot.Model.Friend.Requests;
+using ShiroBot.Model.Friend.Responses;
 using ShiroBot.Model.Group.Requests;
 using ShiroBot.Model.Group.Responses;
 using ShiroBot.Model.Message.Requests;
@@ -26,6 +27,40 @@ public sealed class QqFriendApi : IQqFriendApi
 
     public Task DeleteFriendAsync(long userId) =>
         Milky.RequestAsync(new DeleteFriendRequest(userId));
+
+    public async Task<IReadOnlyList<Qq.Model.QqFriendRequest>> GetFriendRequestsAsync(int limit = 20, bool isFiltered = false)
+    {
+        var response = await Milky.RequestAsync<GetFriendRequestsRequest, GetFriendRequestsResponse>(
+            new GetFriendRequestsRequest(limit, isFiltered));
+        return response.Requests
+            .Select(request => new Qq.Model.QqFriendRequest
+            {
+                Time = DateTimeOffset.FromUnixTimeSeconds(request.Time),
+                InitiatorId = request.InitiatorId,
+                InitiatorUid = request.InitiatorUid,
+                TargetUserId = request.TargetUserId,
+                TargetUserUid = request.TargetUserUid,
+                State = ToQqState(request.State),
+                Comment = string.IsNullOrEmpty(request.Comment) ? null : request.Comment,
+                Via = string.IsNullOrEmpty(request.Via) ? null : request.Via,
+                IsFiltered = request.IsFiltered
+            })
+            .ToArray();
+    }
+
+    public Task AcceptFriendRequestAsync(string initiatorUid, bool isFiltered = false) =>
+        Milky.RequestAsync(new AcceptFriendRequestRequest(initiatorUid, isFiltered));
+
+    public Task RejectFriendRequestAsync(string initiatorUid, bool isFiltered = false, string? reason = null) =>
+        Milky.RequestAsync(new RejectFriendRequestRequest(initiatorUid, isFiltered, reason));
+
+    private static QqRequestState ToQqState(Mk.FriendRequestState state) => state switch
+    {
+        Mk.FriendRequestState.Accepted => QqRequestState.Accepted,
+        Mk.FriendRequestState.Rejected => QqRequestState.Rejected,
+        Mk.FriendRequestState.Ignored => QqRequestState.Ignored,
+        _ => QqRequestState.Pending
+    };
 }
 
 /// <summary>IQqGroupApi 的 Milky 实现。</summary>
@@ -66,6 +101,16 @@ public sealed class QqGroupApi : IQqGroupApi
     public Task SendMessageReactionAsync(long groupId, long messageSeq, string faceId, bool isAdd = true) =>
         Milky.RequestAsync(new SendGroupMessageReactionRequest(
             groupId, messageSeq, faceId, SendGroupMessageReactionRequestReactionType.Face, isAdd));
+
+    public Task SendMessageReactionAsync(long groupId, long messageSeq, string reactionId, QqReactionType reactionType, bool isAdd = true) =>
+        Milky.RequestAsync(new SendGroupMessageReactionRequest(
+            groupId,
+            messageSeq,
+            reactionId,
+            reactionType == QqReactionType.Emoji
+                ? SendGroupMessageReactionRequestReactionType.Emoji
+                : SendGroupMessageReactionRequestReactionType.Face,
+            isAdd));
 
     public async Task<IReadOnlyList<QqGroupAnnouncement>> GetAnnouncementsAsync(long groupId)
     {
@@ -128,6 +173,105 @@ public sealed class QqGroupApi : IQqGroupApi
             request.GroupId,
             request.IsFiltered,
             reason));
+
+    public Task AcceptJoinRequestAsync(long groupId, long notificationSeq, bool isInvited = false, bool isFiltered = false) =>
+        Milky.RequestAsync(new AcceptGroupRequestRequest(
+            notificationSeq,
+            isInvited
+                ? AcceptGroupRequestRequestNotificationType.InvitedJoinRequest
+                : AcceptGroupRequestRequestNotificationType.JoinRequest,
+            groupId,
+            isFiltered));
+
+    public Task RejectJoinRequestAsync(long groupId, long notificationSeq, bool isInvited = false, bool isFiltered = false, string? reason = null) =>
+        Milky.RequestAsync(new RejectGroupRequestRequest(
+            notificationSeq,
+            isInvited
+                ? RejectGroupRequestRequestNotificationType.InvitedJoinRequest
+                : RejectGroupRequestRequestNotificationType.JoinRequest,
+            groupId,
+            isFiltered,
+            reason));
+
+    public async Task<(IReadOnlyList<QqGroupNotification> Notifications, long? NextNotificationSeq)> GetNotificationsAsync(
+        long? startNotificationSeq = null, bool isFiltered = false, int limit = 20)
+    {
+        var response = await Milky.RequestAsync<GetGroupNotificationsRequest, GetGroupNotificationsResponse>(
+            new GetGroupNotificationsRequest(startNotificationSeq, isFiltered, limit));
+
+        var notifications = response.Notifications
+            .Select(ToQqNotification)
+            .Where(notification => notification is not null)
+            .Cast<QqGroupNotification>()
+            .ToArray();
+
+        return (notifications, response.NextNotificationSeq);
+    }
+
+    public Task AcceptInvitationAsync(long groupId, long invitationSeq) =>
+        Milky.RequestAsync(new AcceptGroupInvitationRequest(groupId, invitationSeq));
+
+    public Task RejectInvitationAsync(long groupId, long invitationSeq) =>
+        Milky.RequestAsync(new RejectGroupInvitationRequest(groupId, invitationSeq));
+
+    private static QqGroupNotification? ToQqNotification(Mk.GroupNotification notification) => notification switch
+    {
+        Mk.JoinRequestGroupNotification join => new QqJoinRequestNotification
+        {
+            GroupId = join.GroupId,
+            NotificationSeq = join.NotificationSeq,
+            InitiatorId = join.InitiatorId,
+            State = ToQqState(join.State),
+            Comment = string.IsNullOrEmpty(join.Comment) ? null : join.Comment,
+            IsFiltered = join.IsFiltered,
+            OperatorId = join.OperatorId
+        },
+        Mk.InvitedJoinRequestGroupNotification invited => new QqInvitedJoinRequestNotification
+        {
+            GroupId = invited.GroupId,
+            NotificationSeq = invited.NotificationSeq,
+            InitiatorId = invited.InitiatorId,
+            TargetUserId = invited.TargetUserId,
+            State = invited.State switch
+            {
+                Mk.InvitedJoinRequestGroupNotificationState.Accepted => QqRequestState.Accepted,
+                Mk.InvitedJoinRequestGroupNotificationState.Rejected => QqRequestState.Rejected,
+                Mk.InvitedJoinRequestGroupNotificationState.Ignored => QqRequestState.Ignored,
+                _ => QqRequestState.Pending
+            },
+            OperatorId = invited.OperatorId
+        },
+        Mk.AdminChangeGroupNotification admin => new QqAdminChangeNotification
+        {
+            GroupId = admin.GroupId,
+            NotificationSeq = admin.NotificationSeq,
+            TargetUserId = admin.TargetUserId,
+            IsSet = admin.IsSet,
+            OperatorId = admin.OperatorId
+        },
+        Mk.KickGroupNotification kick => new QqKickNotification
+        {
+            GroupId = kick.GroupId,
+            NotificationSeq = kick.NotificationSeq,
+            TargetUserId = kick.TargetUserId,
+            OperatorId = kick.OperatorId
+        },
+        Mk.QuitGroupNotification quit => new QqQuitNotification
+        {
+            GroupId = quit.GroupId,
+            NotificationSeq = quit.NotificationSeq,
+            TargetUserId = quit.TargetUserId
+        },
+        _ => null
+    };
+
+    private static QqRequestState ToQqState(Mk.JoinRequestGroupNotificationState state) => state switch
+    {
+        Mk.JoinRequestGroupNotificationState.Accepted => QqRequestState.Accepted,
+        Mk.JoinRequestGroupNotificationState.Rejected => QqRequestState.Rejected,
+        Mk.JoinRequestGroupNotificationState.Ignored => QqRequestState.Ignored,
+        _ => QqRequestState.Pending
+    };
 }
 
 /// <summary>IQqFileApi 的 Milky 实现。</summary>
@@ -224,6 +368,9 @@ public sealed class QqFileApi : IQqFileApi
 
     public Task DeleteGroupFolderAsync(long groupId, string folderId) =>
         Milky.RequestAsync(new DeleteGroupFolderRequest(groupId, folderId));
+
+    public Task PersistGroupFileAsync(long groupId, string fileId) =>
+        Milky.RequestAsync(new PersistGroupFileRequest(groupId, fileId));
 }
 
 /// <summary>IQqSystemApi 的 Milky 实现。</summary>
@@ -318,6 +465,43 @@ public sealed class QqSystemApi : IQqSystemApi
         var response = await Milky.RequestAsync<GetCsrfTokenRequest, GetCsrfTokenResponse>(new GetCsrfTokenRequest());
         return response.CsrfToken;
     }
+
+    async Task<QqLoginInfo> IQqSystemApi.GetLoginInfoAsync()
+    {
+        var response = await Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest());
+        return new QqLoginInfo(response.Uin, response.Nickname);
+    }
+
+    async Task<QqImplInfo> IQqSystemApi.GetImplInfoAsync()
+    {
+        var response = await Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest());
+        return new QqImplInfo
+        {
+            ImplName = response.ImplName,
+            ImplVersion = response.ImplVersion,
+            QqProtocolVersion = response.QqProtocolVersion,
+            QqProtocolType = response.QqProtocolType.ToString().ToLowerInvariant(),
+            ProtocolVersion = response.MilkyVersion
+        };
+    }
+
+    async Task<IReadOnlyList<string>> IQqSystemApi.GetCustomFaceUrlListAsync()
+    {
+        var response = await Milky.RequestAsync<GetCustomFaceUrlListRequest, GetCustomFaceUrlListResponse>(
+            new GetCustomFaceUrlListRequest());
+        return response.Urls;
+    }
+
+    public Task SetPeerPinAsync(QqMessageScene scene, long peerId, bool isPinned = true) =>
+        Milky.RequestAsync(new SetPeerPinRequest(
+            scene switch
+            {
+                QqMessageScene.Group => SetPeerPinRequestMessageScene.Group,
+                QqMessageScene.Temp => SetPeerPinRequestMessageScene.Temp,
+                _ => SetPeerPinRequestMessageScene.Friend
+            },
+            peerId,
+            isPinned));
 }
 
 /// <summary>IQqMessageApi 的 Milky 实现。</summary>
@@ -344,6 +528,56 @@ public sealed class QqMessageApi : IQqMessageApi
         return privateResponse.MessageSeq;
     }
 
+    public async Task<QqIncomingMessage?> GetMessageAsync(QqMessageScene scene, long peerId, long messageSeq)
+    {
+        var response = await Milky.RequestAsync<GetMessageRequest, GetMessageResponse>(new GetMessageRequest(
+            scene switch
+            {
+                QqMessageScene.Group => GetMessageRequestMessageScene.Group,
+                QqMessageScene.Temp => GetMessageRequestMessageScene.Temp,
+                _ => GetMessageRequestMessageScene.Friend
+            },
+            peerId,
+            messageSeq));
+        return QqModelMapper.ToQq(response.Message);
+    }
+
+    public async Task<(IReadOnlyList<QqIncomingMessage> Messages, long? NextMessageSeq)> GetHistoryMessagesAsync(
+        QqMessageScene scene, long peerId, long? startMessageSeq = null, int limit = 20)
+    {
+        var response = await Milky.RequestAsync<GetHistoryMessagesRequest, GetHistoryMessagesResponse>(
+            new GetHistoryMessagesRequest(
+                scene switch
+                {
+                    QqMessageScene.Group => GetHistoryMessagesRequestMessageScene.Group,
+                    QqMessageScene.Temp => GetHistoryMessagesRequestMessageScene.Temp,
+                    _ => GetHistoryMessagesRequestMessageScene.Friend
+                },
+                peerId,
+                startMessageSeq,
+                limit));
+
+        var messages = response.Messages
+            .Select(QqModelMapper.ToQq)
+            .Where(message => message is not null)
+            .Cast<QqIncomingMessage>()
+            .ToArray();
+
+        return (messages, response.NextMessageSeq);
+    }
+
+    public Task RecallMessageAsync(QqMessageScene scene, long peerId, long messageSeq) =>
+        scene == QqMessageScene.Group
+            ? Milky.RequestAsync(new RecallGroupMessageRequest(peerId, messageSeq))
+            : Milky.RequestAsync(new RecallPrivateMessageRequest(peerId, messageSeq));
+
+    public async Task<string> GetResourceTempUrlAsync(string resourceId)
+    {
+        var response = await Milky.RequestAsync<GetResourceTempUrlRequest, GetResourceTempUrlResponse>(
+            new GetResourceTempUrlRequest(resourceId));
+        return response.Url;
+    }
+
     public async Task<IReadOnlyList<QqForwardedIncomingMessage>> GetForwardedMessagesAsync(string forwardId)
     {
         var response = await Milky.RequestAsync<GetForwardedMessagesRequest, GetForwardedMessagesResponse>(
@@ -351,6 +585,7 @@ public sealed class QqMessageApi : IQqMessageApi
         return response.Messages
             .Select(message => new QqForwardedIncomingMessage
             {
+                MessageSeq = message.MessageSeq,
                 SenderName = message.SenderName,
                 AvatarUrl = message.AvatarUrl,
                 Time = DateTimeOffset.FromUnixTimeSeconds(message.Time),
