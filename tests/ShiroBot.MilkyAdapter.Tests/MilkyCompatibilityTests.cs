@@ -26,7 +26,7 @@ public sealed class MilkyCompatibilityTests
         Assert.NotNull(attribute);
         Assert.Equal("milky", attribute.Id);
         Assert.Equal("milky", attribute.Protocol);
-        Assert.Equal("2.0.0", attribute.Version);
+        Assert.Equal("2.0.1", attribute.Version);
         Assert.Equal(">=1.2.0 <1.4.0", attribute.ProtocolVersionRange);
     }
 
