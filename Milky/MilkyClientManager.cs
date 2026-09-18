@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using ShiroBot.SDK.Abstractions;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
 internal static class MilkyClientManager
 {
@@ -35,6 +35,15 @@ internal static class MilkyClientManager
                 httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
             }
             _instance = new MilkyClient(httpClient);
+        }
+    }
+
+    public static void Reset()
+    {
+        lock (Lock)
+        {
+            _instance?.Dispose();
+            _instance = null;
         }
     }
 }

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag name, for example v1.0.0"
+        description: "Release tag name, for example v2.0.0"
         required: true
         type: string
 
@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  PROJECT_FILE: ShiroBot.MilkyAdapter.csproj
+  PROJECT_FILE: ShiroBot.Adapter.Milky.csproj
   TEST_PROJECT: tests/ShiroBot.MilkyAdapter.Tests/ShiroBot.MilkyAdapter.Tests.csproj
   PUBLISH_DIR: artifacts/publish
 
@@ -32,42 +32,38 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore package references
+      - name: Restore
         run: dotnet restore "$TEST_PROJECT"
 
-      - name: Test package references
+      - name: Test
         run: >-
           dotnet test "$TEST_PROJECT" --configuration Release --no-restore
-          -p:CopyAdapterToHost=false
+          -p:CopyAdapterToHost=false -p:ShiroBotPluginPackagingEnabled=false
 
-      - name: Publish plugin
+      - name: Publish
         run: >-
           dotnet publish "$PROJECT_FILE" --configuration Release
-          --no-restore
           --output "$PUBLISH_DIR"
           -p:CopyAdapterToHost=false
 
-      - name: Validate and collect plugin DLL
+      - name: Package adapter
         shell: bash
         run: |
-          shopt -s nullglob
-          dlls=("$PUBLISH_DIR"/*.dll)
-          if [ "${#dlls[@]}" -ne 1 ]; then
-            printf 'Expected exactly one DLL in %s, found %s\n' "$PUBLISH_DIR" "${#dlls[@]}"
-            printf '%s\n' "${dlls[@]}"
+          set -euo pipefail
+          ADAPTER_DLL="$PUBLISH_DIR/ShiroBot.Adapter.Milky.dll"
+          if [ ! -f "$ADAPTER_DLL" ]; then
+            echo "Adapter DLL not found: $ADAPTER_DLL"
+            ls -la "$PUBLISH_DIR"
             exit 1
           fi
-          PLUGIN_DLL="$PUBLISH_DIR/ShiroBot.MilkyAdapter.dll"
-          if [ "${dlls[0]}" != "$PLUGIN_DLL" ]; then
-            printf 'Unexpected plugin DLL: %s\n' "${dlls[0]}"
-            exit 1
-          fi
-          mkdir -p release
-          cp "$PLUGIN_DLL" release/
+          mkdir -p release/stage
+          cp "$ADAPTER_DLL" release/stage/
+          [ -f "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" ] && cp "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" release/stage/ || true
+          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ./*)
 
-      - name: Upload DLL to Release
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          files: release/*.dll
+          files: release/ShiroBot.Adapter.Milky.zip

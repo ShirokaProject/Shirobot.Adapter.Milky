@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ShiroBot.SDK.Abstractions;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
 public sealed class MilkyEventHandler(HttpClient httpClient)
 {

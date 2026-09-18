@@ -1,6 +1,6 @@
-using ShiroBot.Model.Common;
+using ShiroBot.Adapter.Milky.Model.Common;
 
-namespace ShiroBot.MilkyAdapter;
+namespace ShiroBot.Adapter.Milky;
 
 internal static class ResourceUriConverter
 {

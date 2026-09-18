@@ -3,26 +3,30 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using ShiroBot.MilkyAdapter;
-using ShiroBot.MilkyAdapter.AdapterImpl;
-using ShiroBot.MilkyAdapter.Milky;
-using ShiroBot.Model.Common;
-using ShiroBot.Model.Group.Responses;
+using ShiroBot.Adapter.Milky;
+using ShiroBot.Adapter.Milky.AdapterImpl;
+using ShiroBot.Adapter.Milky.Milky;
+using ShiroBot.Adapter.Milky.Model.Common;
+using ShiroBot.Adapter.Milky.Model.Group.Responses;
+using ShiroBot.Model.QQ;
 using ShiroBot.SDK.Core;
+using ShiroBot.SDK.Models;
 using Xunit;
+using AdapterType = ShiroBot.Adapter.Milky.MilkyAdapter;
 
 namespace ShiroBot.MilkyAdapter.Tests;
 
 public sealed class MilkyCompatibilityTests
 {
     [Fact]
-    public void Adapter_declares_sdk_070_metadata_attribute()
+    public void Adapter_declares_sdk_090_metadata_attribute()
     {
-        var attribute = typeof(MilkyAdapter).GetCustomAttribute<BotAdapterAttribute>();
+        var attribute = typeof(AdapterType).GetCustomAttribute<BotAdapterAttribute>();
 
         Assert.NotNull(attribute);
-        Assert.Equal("MilkyAdapter", attribute.Id);
-        Assert.Equal("Milky", attribute.Protocol);
+        Assert.Equal("milky", attribute.Id);
+        Assert.Equal("milky", attribute.Protocol);
+        Assert.Equal("2.0.0", attribute.Version);
         Assert.Equal(">=1.2.0 <1.4.0", attribute.ProtocolVersionRange);
     }
 
@@ -80,7 +84,7 @@ public sealed class MilkyCompatibilityTests
         var value = JsonSerializer.Deserialize<Event>(json, MilkyJson.JsonOptions);
         var tempMessage = Assert.IsType<TempIncomingMessage>(value);
         var service = new EventService();
-        Event? received = null;
+        BotEvent? received = null;
         service.EventReceived += message =>
         {
             received = message;
@@ -89,8 +93,11 @@ public sealed class MilkyCompatibilityTests
 
         await service.OnEventReceivedAsync(tempMessage);
 
-        Assert.Same(tempMessage, received);
-        Assert.Equal(300, tempMessage.PeerId);
+        var message = Assert.IsType<MessageEvent>(received);
+        var raw = Assert.IsType<QTempMessage>(message.Raw);
+        Assert.Equal(300, raw.PeerId);
+        Assert.Equal("300", message.Channel.Id);
+        Assert.Equal(ChannelType.Other, message.Channel.Type);
     }
 
     [Fact]
@@ -404,16 +411,16 @@ public sealed class MilkyCompatibilityTests
     [Fact]
     public void Version_parser_rejects_negative_parts_and_marks_prerelease_conservatively()
     {
-        Assert.False(MilkyAdapter.TryParseMilkyVersion("-1.2.3", out _, out _));
-        Assert.False(MilkyAdapter.TryParseMilkyVersion("1.-2.3", out _, out _));
-        Assert.False(MilkyAdapter.TryParseMilkyVersion("1.2.-3", out _, out _));
+        Assert.False(AdapterType.TryParseMilkyVersion("-1.2.3", out _, out _));
+        Assert.False(AdapterType.TryParseMilkyVersion("1.-2.3", out _, out _));
+        Assert.False(AdapterType.TryParseMilkyVersion("1.2.-3", out _, out _));
 
-        Assert.True(MilkyAdapter.TryParseMilkyVersion("v1.2.0-rc.1", out var version, out var isPreRelease));
+        Assert.True(AdapterType.TryParseMilkyVersion("v1.2.0-rc.1", out var version, out var isPreRelease));
         Assert.Equal(new Version(1, 2, 0), version);
         Assert.True(isPreRelease);
-        Assert.True(MilkyAdapter.IsBelowMinimumMilkyVersion(version, isPreRelease));
+        Assert.True(AdapterType.IsBelowMinimumMilkyVersion(version, isPreRelease));
 
-        Assert.True(MilkyAdapter.TryParseMilkyVersion("1.3.0+build.1", out _, out isPreRelease));
+        Assert.True(AdapterType.TryParseMilkyVersion("1.3.0+build.1", out _, out isPreRelease));
         Assert.False(isPreRelease);
     }
 

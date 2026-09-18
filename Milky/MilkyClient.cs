@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
-public class MilkyClient(HttpClient httpClient)
+public class MilkyClient(HttpClient httpClient) : IDisposable
 {
     public MilkyEventHandler Events { get; } = new(httpClient);
 
@@ -95,6 +95,8 @@ public class MilkyClient(HttpClient httpClient)
         var direct = json.Deserialize<TResponse>(JsonOptions);
         return direct ?? throw new JsonException($"Failed to deserialize response to type {typeof(TResponse).FullName}.");
     }
+
+    public void Dispose() => httpClient.Dispose();
 }
 
 internal sealed class SnakeCaseEnumJsonConverterFactory : JsonConverterFactory

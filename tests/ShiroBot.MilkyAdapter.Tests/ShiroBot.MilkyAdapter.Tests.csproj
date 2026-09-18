@@ -19,7 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../ShiroBot.MilkyAdapter.csproj" />
+    <ProjectReference Include="../../ShiroBot.Adapter.Milky.csproj">
+      <AdditionalProperties>ShiroBotPluginPackagingEnabled=false</AdditionalProperties>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>
