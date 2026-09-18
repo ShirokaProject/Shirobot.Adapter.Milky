@@ -1,9 +1,9 @@
-using ShiroBot.Qq.Model;
+using ShiroBot.Model.QQ;
 using ShiroBot.SDK.Models;
 using Sdk = ShiroBot.SDK.Models;
-using Mk = ShiroBot.Model.Common;
+using Mk = ShiroBot.Adapter.Milky.Model.Common;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
 /// <summary>
 /// Milky(QQ)协议模型 ↔ ShiroBot 平台无关核心模型的双向映射。
@@ -55,7 +55,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = QqModelMapper.ToQq(friend),
+            Raw = QModelMapper.ToQq(friend),
             MessageId = friend.MessageSeq.ToString(),
             Channel = DirectChannel(friend.PeerId),
             Sender = ToUser(friend.Friend),
@@ -66,7 +66,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = QqModelMapper.ToQq(group),
+            Raw = QModelMapper.ToQq(group),
             MessageId = group.MessageSeq.ToString(),
             Channel = ToChannel(group.Group),
             Sender = ToUser(group.GroupMember),
@@ -78,7 +78,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = QqModelMapper.ToQq(temp),
+            Raw = QModelMapper.ToQq(temp),
             MessageId = temp.MessageSeq.ToString(),
             Channel = TempChannel(temp.PeerId, temp.Group?.GroupId),
             Sender = new Sdk.User(temp.SenderId.ToString()),
@@ -117,7 +117,7 @@ internal static class MilkyMapper
             FileName = file.FileName,
             FileSize = file.FileSize
         },
-        _ => new RawSegment(PlatformId, GetRawSegmentKind(segment), QqModelMapper.ToQq(segment))
+        _ => new RawSegment(PlatformId, GetRawSegmentKind(segment), QModelMapper.ToQq(segment))
     };
 
     private static string GetRawSegmentKind(Mk.IncomingSegment segment) => segment switch
@@ -145,10 +145,10 @@ internal static class MilkyMapper
         ImageSegment image => new Mk.ImageOutgoingSegment(image.Uri) { Summary = image.Summary },
         AudioSegment audio => new Mk.RecordOutgoingSegment(audio.Uri),
         VideoSegment video => new Mk.VideoOutgoingSegment(video.Uri, video.ThumbnailUri),
-        RawSegment { Payload: QqOutgoingSegment qqOutgoing } => QqModelMapper.ToMilky(qqOutgoing),
+        RawSegment { Payload: QOutgoingSegment qOutgoing } => QModelMapper.ToMilky(qOutgoing),
         RawSegment { Payload: Mk.OutgoingSegment outgoing } => outgoing,
         RawSegment raw => throw new NotSupportedException(
-            $"RawSegment(kind={raw.Kind}) 的 Payload 必须是 QqOutgoingSegment,实际为 {raw.Payload?.GetType().Name ?? "null"}。"),
+            $"RawSegment(kind={raw.Kind}) 的 Payload 必须是 QOutgoingSegment,实际为 {raw.Payload?.GetType().Name ?? "null"}。"),
         _ => throw new NotSupportedException($"Milky 适配器不支持发送 {segment.GetType().Name}。")
     };
 
@@ -163,11 +163,14 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = recall,
+            Raw = QModelMapper.ToQqEventPayload(recall),
             MessageId = recall.MessageSeq.ToString(),
-            Channel = recall.MessageScene == Mk.MessageRecallEventMessageScene.Group
-                ? GroupChannel(recall.PeerId)
-                : DirectChannel(recall.PeerId),
+            Channel = recall.MessageScene switch
+            {
+                Mk.MessageRecallEventMessageScene.Group => GroupChannel(recall.PeerId),
+                Mk.MessageRecallEventMessageScene.Temp => TempChannel(recall.PeerId, null),
+                _ => DirectChannel(recall.PeerId)
+            },
             SenderId = recall.SenderId.ToString(),
             OperatorId = recall.OperatorId.ToString()
         },
@@ -176,7 +179,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = increase,
+            Raw = QModelMapper.ToQqEventPayload(increase),
             Channel = GroupChannel(increase.GroupId),
             UserId = increase.UserId.ToString(),
             OperatorId = (increase.OperatorId ?? increase.InvitorId)?.ToString()
@@ -186,7 +189,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = decrease,
+            Raw = QModelMapper.ToQqEventPayload(decrease),
             Channel = GroupChannel(decrease.GroupId),
             UserId = decrease.UserId.ToString(),
             OperatorId = decrease.OperatorId?.ToString()
@@ -196,7 +199,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = friendRequest,
+            Raw = QModelMapper.ToQqEventPayload(friendRequest),
             UserId = friendRequest.InitiatorId.ToString(),
             Comment = friendRequest.Comment,
             Token = friendRequest.InitiatorUid
@@ -206,7 +209,7 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = invitation,
+            Raw = QModelMapper.ToQqEventPayload(invitation),
             GuildId = invitation.GroupId.ToString(),
             InviterId = invitation.InitiatorId.ToString(),
             Token = invitation.InvitationSeq.ToString()
@@ -216,16 +219,16 @@ internal static class MilkyMapper
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = offline,
+            Raw = QModelMapper.ToQqEventPayload(offline),
             Reason = offline.Reason
         },
 
-        // 其余 QQ 特有事件统一走 PlatformEvent,Raw 为通用 QQ 模型负载(ShiroBot.Qq.Model)
+        // Other QQ-specific events use PlatformEvent; Raw carries the ShiroBot.Model.QQ payload.
         _ => new PlatformEvent
         {
             Platform = PlatformId,
             SelfId = MilkySession.SelfId,
-            Raw = (object?)QqModelMapper.ToQqEventPayload(e) ?? e,
+            Raw = (object?)QModelMapper.ToQqEventPayload(e) ?? e,
             Kind = GetPlatformEventKind(e),
             Channel = GetPlatformEventChannel(e)
         }

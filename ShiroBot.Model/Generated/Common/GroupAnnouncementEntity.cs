@@ -2,7 +2,7 @@
 #nullable enable
 using System.Text.Json.Serialization;
 
-namespace ShiroBot.Model.Common;
+namespace ShiroBot.Adapter.Milky.Model.Common;
 
 [method: JsonConstructor]
 public sealed partial record GroupAnnouncementEntity(

@@ -1,8 +1,8 @@
-using ShiroBot.MilkyAdapter.Milky;
-using ShiroBot.Model.System.Requests;
-using ShiroBot.Model.System.Responses;
+using ShiroBot.Adapter.Milky.Milky;
+using ShiroBot.Adapter.Milky.Model.System.Requests;
+using ShiroBot.Adapter.Milky.Model.System.Responses;
 
-namespace ShiroBot.MilkyAdapter.AdapterImpl;
+namespace ShiroBot.Adapter.Milky.AdapterImpl;
 
 public class SystemService
 {

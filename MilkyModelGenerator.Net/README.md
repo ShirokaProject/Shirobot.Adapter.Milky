@@ -20,8 +20,8 @@ If the server requires a meaningful new value, the adapter call site must be upd
 previously had no request record and gain their first request field also require manual adapter
 wiring.
 
-The default IR URL is locked to SHA-256
-`17a4f1da0ce44640ab73840015756227b8180ca5a503433ba4d41a3a82a13ea0`. The generated
+The default official Milky 1.3 IR URL is locked to SHA-256
+`94783956629f2cff29fa0a7c38e9bce6f5329870cd525c715b2d9c4166425dbd`. The generated
 `_GeneratedInfo.cs` records source label, URL, SHA-256, Milky version and package version. Review ABI
 changes before updating the lock; do not silently regenerate from a changed mutable URL.
 
@@ -37,13 +37,13 @@ Output layout:
 Default output:
 
 ```powershell
-.\output\Generated
+.\..\ShiroBot.Model\Generated
 ```
 
 Default namespace:
 
 ```powershell
-Milky.Models
+ShiroBot.Adapter.Milky.Model
 ```
 
 Run directly:
@@ -76,9 +76,9 @@ Custom target example:
 dotnet run --project .\MilkyModelGenerator.Net.csproj -- `
   --output C:\path\to\Generated `
   --namespace My.Models `
-  --ir-url https://unpkg.com/@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json `
-  --ir-source @saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json `
-  --expected-sha256 17a4f1da0ce44640ab73840015756227b8180ca5a503433ba4d41a3a82a13ea0
+  --ir-url https://milky.ntqqrev.org/raw/milky-ir/ir.json `
+  --ir-source milky-ir/ir.json `
+  --expected-sha256 94783956629f2cff29fa0a7c38e9bce6f5329870cd525c715b2d9c4166425dbd
 ```
 
 Equivalent wrapper usage:
@@ -87,7 +87,7 @@ Equivalent wrapper usage:
 .\generate-models.ps1 -Preset Custom `
   -Output C:\path\to\Generated `
   -Namespace My.Models `
-  -IrUrl https://unpkg.com/@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json `
-  -IrSource @saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json `
-  -IrSha256 17a4f1da0ce44640ab73840015756227b8180ca5a503433ba4d41a3a82a13ea0
+  -IrUrl https://milky.ntqqrev.org/raw/milky-ir/ir.json `
+  -IrSource milky-ir/ir.json `
+  -IrSha256 94783956629f2cff29fa0a7c38e9bce6f5329870cd525c715b2d9c4166425dbd
 ```

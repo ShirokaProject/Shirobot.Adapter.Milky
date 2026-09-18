@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ShiroBot.Model.Common;
+using ShiroBot.Adapter.Milky.Model.Common;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
 internal static class MilkyJson
 {

@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ShiroBot.Model.Common;
+namespace ShiroBot.Adapter.Milky.Model.Common;
 
 public sealed record EventFieldMetadata(string PropertyName, string Description);
 

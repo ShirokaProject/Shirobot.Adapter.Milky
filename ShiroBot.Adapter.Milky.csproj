@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <AssemblyName>ShiroBot.Adapter.Milky</AssemblyName>
+        <RootNamespace>ShiroBot.Adapter.Milky</RootNamespace>
+        <HostAdapterDir>..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\adapters\ShiroBot.Adapter.Milky\</HostAdapterDir>
+        <Configurations>Debug;Release</Configurations>
+        <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
+        <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 子项目目录不参与适配器本体编译 -->
+        <Compile Remove="ShiroBot.Model/**/*.cs" />
+        <Compile Remove="MilkyModelGenerator.Net/**/*.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),随适配器一起打包 -->
+        <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
+        <PackageReference Include="ShiroBot.SDK" Version="0.9.1" />
+    </ItemGroup>
+
+    <Target Name="CopyAdapterToHost"
+            AfterTargets="Build"
+            Condition="'$(Configuration)'=='Debug'">
+        <RemoveDir Directories="$(MSBuildProjectDirectory)\..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\adapters\ShiroBot.MilkyAdapter" />
+        <MakeDir Directories="$(HostAdapterDir)" />
+
+        <ItemGroup>
+            <AdapterDebugOutput Include="$(TargetDir)**\*"
+                                 Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.QQ.dll;$(TargetDir)ShiroBot.Model.QQ.pdb;$(TargetDir)ShiroBot.MilkyAdapter.dll;$(TargetDir)ShiroBot.MilkyAdapter.pdb;$(TargetDir)ShiroBot.MilkyAdapter.deps.json;$(TargetDir)ShiroBot.Model.dll;$(TargetDir)ShiroBot.Model.pdb" />
+        </ItemGroup>
+
+        <Copy SourceFiles="@(AdapterDebugOutput)"
+              DestinationFiles="@(AdapterDebugOutput->'$(HostAdapterDir)%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>

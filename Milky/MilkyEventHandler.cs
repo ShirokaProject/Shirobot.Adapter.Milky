@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ShiroBot.SDK.Abstractions;
 
-namespace ShiroBot.MilkyAdapter.Milky;
+namespace ShiroBot.Adapter.Milky.Milky;
 
 public sealed class MilkyEventHandler(HttpClient httpClient)
 {
@@ -281,7 +281,8 @@ internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegme
         typeof(FileIncomingSegment),
         typeof(ForwardIncomingSegment),
         typeof(LightAppIncomingSegment),
-        typeof(XmlIncomingSegment)
+        typeof(XmlIncomingSegment),
+        typeof(MarkdownIncomingSegment)
     ];
 
     private static readonly Dictionary<string, Type> WrappedSegmentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -301,7 +302,8 @@ internal sealed class IncomingSegmentJsonConverter : JsonConverter<IncomingSegme
         ["file"] = typeof(FileIncomingSegment),
         ["forward"] = typeof(ForwardIncomingSegment),
         ["light_app"] = typeof(LightAppIncomingSegment),
-        ["xml"] = typeof(XmlIncomingSegment)
+        ["xml"] = typeof(XmlIncomingSegment),
+        ["markdown"] = typeof(MarkdownIncomingSegment)
     };
 
     public override IncomingSegment Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -379,6 +381,7 @@ internal sealed class EventJsonConverter : JsonConverter<Event>
         ["group_whole_mute"] = typeof(GroupWholeMuteEvent),
         ["group_nudge"] = typeof(GroupNudgeEvent),
         ["group_file_upload"] = typeof(GroupFileUploadEvent),
+        ["group_disband"] = typeof(GroupDisbandEvent),
         ["bot_offline"] = typeof(BotOfflineEvent),
         ["peer_pin_change"] = typeof(PeerPinChangeEvent)
     };

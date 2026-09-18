@@ -21,8 +21,8 @@ if (-not (Test-Path $generatorProject)) {
 $defaultIrUrl = 'https://unpkg.com/@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json'
 $defaultIrSource = '@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json'
 $defaultIrSha256 = '17a4f1da0ce44640ab73840015756227b8180ca5a503433ba4d41a3a82a13ea0'
-$defaultOutput = Join-Path $projectRoot 'output\Generated'
-$defaultNamespace = 'Milky.Models'
+$defaultOutput = Join-Path $projectRoot '..\ShiroBot.Model\Generated'
+$defaultNamespace = 'ShiroBot.Adapter.Milky.Model'
 
 function Read-Choice {
     param(

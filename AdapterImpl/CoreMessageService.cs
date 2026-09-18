@@ -1,9 +1,9 @@
-using ShiroBot.MilkyAdapter.Milky;
+using ShiroBot.Adapter.Milky.Milky;
 using ShiroBot.SDK.Adapter;
 using ShiroBot.SDK.Models;
 using Sdk = ShiroBot.SDK.Models;
 
-namespace ShiroBot.MilkyAdapter.AdapterImpl;
+namespace ShiroBot.Adapter.Milky.AdapterImpl;
 
 /// <summary>平台无关消息服务的 Milky 实现。</summary>
 public class CoreMessageService : IMessageService

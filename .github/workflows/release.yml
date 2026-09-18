@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag name, for example v1.0.0"
+        description: "Release tag name, for example v2.0.0"
         required: true
         type: string
 
@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  PROJECT_DIR: .
+  PROJECT: ShiroBot.Adapter.Milky.csproj
   PUBLISH_DIR: bin/Release/net10.0/publish
 
 jobs:
@@ -32,24 +32,29 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Publish
-        run: dotnet publish "$PROJECT_DIR" --configuration Release
+        run: dotnet publish "$PROJECT" --configuration Release
 
-      - name: Collect Plugin DLL
+      - name: Package adapter
         shell: bash
         run: |
-          PROJECT="$(basename "$(ls *.csproj | head -1)" .csproj)"
-          PLUGIN_DLL="$PUBLISH_DIR/${PROJECT}.dll"
+          set -euo pipefail
+          PLUGIN_DLL="$PUBLISH_DIR/ShiroBot.Adapter.Milky.dll"
           if [ ! -f "$PLUGIN_DLL" ]; then
-            echo "Plugin DLL not found: $PLUGIN_DLL"
+            echo "Adapter DLL not found: $PLUGIN_DLL"
             ls -la "$PUBLISH_DIR"
             exit 1
           fi
-          mkdir -p release
-          cp "$PLUGIN_DLL" release/
+          mkdir -p release/stage
+          cp "$PLUGIN_DLL" release/stage/
+          [ -f "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" ] && cp "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" release/stage/ || true
+          for shared in ShiroBot.SDK.dll ShiroBot.Model.QQ.dll ShiroBot.Model.Discord.dll ShiroBot.Model.Telegram.dll; do
+            rm -f "release/stage/$shared"
+          done
+          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ./*)
 
-      - name: Upload DLL to Release
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          files: release/*.dll
+          files: release/ShiroBot.Adapter.Milky.zip

@@ -2,7 +2,7 @@
 #nullable enable
 using System.Collections.Generic;
 
-namespace ShiroBot.Model.Common;
+namespace ShiroBot.Adapter.Milky.Model.Common;
 
 public sealed partial record GroupIncomingMessage(
     long PeerId,

@@ -1,8 +1,8 @@
-using ShiroBot.MilkyAdapter.Milky;
+using ShiroBot.Adapter.Milky.Milky;
 using ShiroBot.SDK.Adapter;
 using ShiroBot.SDK.Models;
 
-namespace ShiroBot.MilkyAdapter.AdapterImpl;
+namespace ShiroBot.Adapter.Milky.AdapterImpl;
 
 /// <summary>把 Milky 事件流转换为平台无关 BotEvent 并上报宿主。</summary>
 public class EventService : IEventService
@@ -22,6 +22,17 @@ public class EventService : IEventService
 
         Milky.EventReceived += OnEventReceivedAsync;
         _attached = true;
+    }
+
+    public void DetachEvent()
+    {
+        if (!_attached)
+        {
+            return;
+        }
+
+        Milky.EventReceived -= OnEventReceivedAsync;
+        _attached = false;
     }
 
     private async Task OnEventReceivedAsync(Event e)

@@ -1549,8 +1549,8 @@ internal sealed record GeneratorOptions(
     string? ExpectedSha256,
     bool SelfTest)
 {
-    private const string DefaultIrUrl = "https://unpkg.com/@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json";
-    private const string DefaultIrSha256 = "17a4f1da0ce44640ab73840015756227b8180ca5a503433ba4d41a3a82a13ea0";
+    private const string DefaultIrUrl = "https://milky.ntqqrev.org/raw/milky-ir/ir.json";
+    private const string DefaultIrSha256 = "94783956629f2cff29fa0a7c38e9bce6f5329870cd525c715b2d9c4166425dbd";
 
     public string GeneratedRootNamespace => $"{RootNamespace}.Generated";
 
@@ -1573,11 +1573,11 @@ internal sealed record GeneratorOptions(
         }
 
         var projectRoot = FindProjectRoot();
-        var defaultOutput = Path.Combine(projectRoot, "output", "Generated");
+        var defaultOutput = Path.GetFullPath(Path.Combine(projectRoot, "..", "ShiroBot.Model", "Generated"));
         var irUrl = values.GetValueOrDefault("--ir-url") ?? DefaultIrUrl;
-        var irSourceName = values.GetValueOrDefault("--ir-source") ?? "@saltify/milky-protocol@1.3.0-rc.1/dist/protocol.json";
+        var irSourceName = values.GetValueOrDefault("--ir-source") ?? "milky-ir/ir.json";
         var outputDirectory = values.GetValueOrDefault("--output");
-        var rootNamespace = values.GetValueOrDefault("--namespace") ?? "Milky.Models";
+        var rootNamespace = values.GetValueOrDefault("--namespace") ?? "ShiroBot.Adapter.Milky.Model";
         var expectedSha256 = values.GetValueOrDefault("--expected-sha256") ??
                              (values.ContainsKey("--ir-url") ? null : DefaultIrSha256);
         var selfTest = values.ContainsKey("--self-test");
