@@ -5,14 +5,17 @@ using ShiroBot.SDK.Adapter;
 using ShiroBot.SDK.Config;
 using ShiroBot.SDK.Core;
 using ShiroBot.SDK.Plugin;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 
-[assembly: ShiroBotApiCompatibility("0.9", "0.9")]
+[assembly: ShiroBotApiCompatibility("0.9.1", "0.9.1")]
 
 namespace ShiroBot.Adapter.Milky;
 
 [BotAdapter("milky",
     Name = "MilkyAdapter",
-    Version = "2.0.1",
+    Version = "2.1.0",
     Description = "Milky (QQ NT) adapter for ShiroBot",
     Author = "ShirokaProject",
     GithubRepo = "https://github.com/ShirokaProject/Shirobot.Adapter.Milky",
@@ -20,7 +23,7 @@ namespace ShiroBot.Adapter.Milky;
     ProtocolVersionRange = ">=1.2.0 <1.4.0",
     IsSingleFile = true,
     SharedAssemblies = "ShiroBot.Model.QQ")]
-public class MilkyAdapter : IBotAdapter
+public class MilkyAdapter : IBotAdapter, IConfigurableAdapter, IConfigurableComponent<MilkyAdapterConfig>
 {
     internal const string SupportedMilkyVersionRange = "1.2.x - 1.3.x";
 
@@ -35,6 +38,7 @@ public class MilkyAdapter : IBotAdapter
     private readonly SystemService _systemExtension = new();
     private CancellationTokenSource? _eventTokenSource;
     private Task? _eventLoopTask;
+    private bool _configInitialized;
 
     public string Platform => MilkyMapper.PlatformId;
     public IMessageService Message { get; } = new CoreMessageService();
@@ -43,6 +47,35 @@ public class MilkyAdapter : IBotAdapter
     public IEventService Event => _eventService;
     public IConfigContext Config { get; set; } = null!;
     public IConsoleLogger Logger { get; set; } = null!;
+
+    /// <summary>The config in effect. The host loads it before StartAsync and replaces it on every save.</summary>
+    public MilkyAdapterConfig CurrentConfigValue { get; private set; } = new();
+
+    /// <summary>Config changes restart the event connection; the host rolls back if the restart fails.</summary>
+    public ConfigApplyMode ApplyMode => ConfigApplyMode.RestartComponent;
+
+    public Task OnConfigLoadedAsync(MilkyAdapterConfig config, CancellationToken cancellationToken)
+    {
+        UseConfig(config);
+        return Task.CompletedTask;
+    }
+
+    public Task OnConfigChangedAsync(
+        MilkyAdapterConfig previous,
+        MilkyAdapterConfig current,
+        CancellationToken cancellationToken)
+    {
+        UseConfig(current);
+        return Task.CompletedTask;
+    }
+
+    private void UseConfig(MilkyAdapterConfig config)
+    {
+        // Switching to webhook with an empty address generates one; persist it so it stays stable.
+        if (EnsureWebhookDefaults(config)) Config.Save(config);
+        CurrentConfigValue = config;
+        _configInitialized = true;
+    }
 
     public TService? GetExtension<TService>() where TService : class =>
         this as TService
@@ -56,17 +89,119 @@ public class MilkyAdapter : IBotAdapter
     public async Task StartAsync()
     {
         await StopAsync().ConfigureAwait(false);
-        var config = Config.Load<MilkyAdapterConfig>();
-        Config.Save(config);
+        if (!_configInitialized) UseConfig(Config.Load<MilkyAdapterConfig>());
+        var config = CurrentConfigValue;
+        ValidateProtocol(config);
         ResourceUriConverter.ForceFileBase64 = config.ForceFileBase64;
 
         MilkyClientManager.Initialize(config.BaseUrl, config.AccessToken);
         _eventService.AttachEvent();
         _eventTokenSource = new CancellationTokenSource();
-        _eventLoopTask = RunConnectionLifecycleAsync(config, _eventTokenSource.Token);
+        var listening = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _eventLoopTask = RunConnectionLifecycleAsync(config, listening, _eventTokenSource.Token);
+        if (!IsWebhook(config)) return;
+
+        // Surface webhook bind failures (port in use, access denied) from StartAsync so the host can
+        // report them and roll a bad config change back instead of leaving a dead listener.
+        try
+        {
+            await listening.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        }
+        catch
+        {
+            await StopAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
-    private async Task RunConnectionLifecycleAsync(MilkyAdapterConfig config, CancellationToken token)
+    private static void ValidateProtocol(MilkyAdapterConfig config)
+    {
+        if (config.Protocol?.Trim().ToLowerInvariant() is not ("webhook" or "ws" or "websocket" or "sse"))
+            throw new ArgumentOutOfRangeException(nameof(config.Protocol), config.Protocol, "支持 webhook、ws、websocket、sse。");
+        if (IsWebhook(config) && string.IsNullOrWhiteSpace(config.WebhookUrl))
+            throw new ArgumentException("Webhook 模式下必须配置 WebhookUrl", nameof(config.WebhookUrl));
+    }
+
+    /// <summary>
+    /// Webhook mode needs a local listen address and a shared secret. Generate them once, on a random free
+    /// loopback port, so a fresh install works without editing the config; the values are then saved.
+    /// </summary>
+    internal static bool EnsureWebhookDefaults(MilkyAdapterConfig config)
+    {
+        if (!IsWebhook(config) || !string.IsNullOrWhiteSpace(config.WebhookUrl)) return false;
+
+        using var probe = new TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+
+        // Windows HttpListener (http.sys) only lets non-admin users register "localhost" prefixes.
+        var host = OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1";
+        config.WebhookUrl = $"http://{host}:{port}/";
+        if (string.IsNullOrWhiteSpace(config.WebhookToken))
+            config.WebhookToken = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
+        return true;
+    }
+
+    private static bool IsWebhook(MilkyAdapterConfig config) =>
+        string.Equals(config.Protocol?.Trim(), "webhook", StringComparison.OrdinalIgnoreCase);
+
+    private Task RunConnectionLifecycleAsync(
+        MilkyAdapterConfig config,
+        TaskCompletionSource<bool> listening,
+        CancellationToken token) =>
+        IsWebhook(config) ? RunWebhookAsync(config, listening, token) : RunActiveConnectionAsync(config, token);
+
+    /// <summary>
+    /// Webhook mode never dials Milky: it listens for pushed events. The account and protocol version are
+    /// identified once the first event proves the implementation is reachable.
+    /// </summary>
+    private async Task RunWebhookAsync(
+        MilkyAdapterConfig config,
+        TaskCompletionSource<bool> listening,
+        CancellationToken token)
+    {
+        Logger.Info($"Webhook 模式：在 {config.WebhookUrl} 等待 Milky 推送事件，不主动连接 Milky。");
+        Logger.Info(string.IsNullOrWhiteSpace(config.WebhookToken)
+            ? "请在 Milky 实现端把事件推送地址设为上述地址。当前未设置 Webhook 密钥，不校验请求来源。"
+            : "请在 Milky 实现端把事件推送地址设为上述地址，并将 Webhook 密钥配置为 Bearer 令牌（见本适配器的 config.toml 或 Dashboard）。");
+        try
+        {
+            await MilkyClientManager.Instance.Events.ReceivingEventUsingWebhookAsync(
+                config.WebhookUrl,
+                config.WebhookToken,
+                token,
+                listening,
+                onFirstEvent: IdentifyAfterFirstEventAsync).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            listening.TrySetException(ex);
+            Logger.Error($"Milky Webhook 监听失败（{config.WebhookUrl}）: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private async Task IdentifyAfterFirstEventAsync()
+    {
+        try
+        {
+            var loginInfo = await _systemExtension.GetLoginInfoAsync().ConfigureAwait(false);
+            MilkySession.SelfId = loginInfo.Uin.ToString();
+            var result = await _systemExtension.GetImplInfoAsync().ConfigureAwait(false);
+            ValidateMilkyVersion(result.MilkyVersion);
+            Logger.Success(
+                $"已收到 Milky 推送 - Nickname: {loginInfo.Nickname}, Milky Impl: {result.ImplName} {result.ImplVersion}, MilkyVersion: {result.MilkyVersion}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning($"已收到 Milky 推送，但无法访问 Milky API（{ex.GetType().Name}: {ex.Message}）。接收事件不受影响，发送消息需要 Milky API 地址可访问。");
+        }
+    }
+
+    private async Task RunActiveConnectionAsync(MilkyAdapterConfig config, CancellationToken token)
     {
         var attempt = 0;
         while (!token.IsCancellationRequested)
@@ -108,12 +243,6 @@ public class MilkyAdapter : IBotAdapter
         {
             "sse" => MilkyClientManager.Instance.Events.ReceivingEventUsingSseAsync(token),
             "ws" or "websocket" => MilkyClientManager.Instance.Events.ReceivingEventUsingWebSocketAsync(token),
-            "webhook" when !string.IsNullOrWhiteSpace(config.WebhookUrl) =>
-                MilkyClientManager.Instance.Events.ReceivingEventUsingWebhookAsync(
-                    config.WebhookUrl,
-                    config.WebhookToken,
-                    token),
-            "webhook" => throw new ArgumentException("Webhook 模式下必须配置 WebhookUrl", nameof(config.WebhookUrl)),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(config.Protocol),
                 config.Protocol,

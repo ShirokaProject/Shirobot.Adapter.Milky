@@ -124,7 +124,8 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         string webhookUrl,
         string? token,
         CancellationToken cancellationToken,
-        TaskCompletionSource<bool>? started = null)
+        TaskCompletionSource<bool>? started = null,
+        Func<Task>? onFirstEvent = null)
     {
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
@@ -164,7 +165,12 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
 
             try
             {
-                await HandleWebhookAsync(context, token, cancellationToken);
+                if (await HandleWebhookAsync(context, token, cancellationToken) && onFirstEvent is not null)
+                {
+                    var callback = onFirstEvent;
+                    onFirstEvent = null;
+                    _ = Task.Run(callback, CancellationToken.None);
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -177,20 +183,21 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         }
     }
 
-    private async Task HandleWebhookAsync(HttpListenerContext context, string? token, CancellationToken cancellationToken)
+    /// <returns>True when a Milky event was accepted and published.</returns>
+    private async Task<bool> HandleWebhookAsync(HttpListenerContext context, string? token, CancellationToken cancellationToken)
     {
         try
         {
             if (context.Request.HttpMethod != HttpMethod.Post.Method)
             {
                 await WriteResponseAsync(context.Response, HttpStatusCode.MethodNotAllowed, "Method Not Allowed", cancellationToken);
-                return;
+                return false;
             }
 
             if (!IsWebhookAuthorized(context.Request, token))
             {
                 await WriteResponseAsync(context.Response, HttpStatusCode.Unauthorized, "Unauthorized", cancellationToken);
-                return;
+                return false;
             }
 
             using var reader = new StreamReader(
@@ -206,11 +213,12 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
                     HttpStatusCode.BadRequest,
                     $"Invalid Milky event: {error ?? "empty payload"}",
                     cancellationToken);
-                return;
+                return false;
             }
 
             await PublishIfNotNullAsync(data);
             await WriteResponseAsync(context.Response, HttpStatusCode.OK, "OK", cancellationToken);
+            return true;
         }
         finally
         {
@@ -245,6 +253,15 @@ public sealed class MilkyEventHandler(HttpClient httpClient)
         try
         {
             using var document = JsonDocument.Parse(payload);
+            // Webhook mode does not log in first, so learn the bot account from the event envelope.
+            if (string.IsNullOrEmpty(MilkySession.SelfId) &&
+                document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("self_id", out var selfId) &&
+                selfId.ValueKind == JsonValueKind.Number)
+            {
+                MilkySession.SelfId = selfId.GetRawText();
+            }
+
             return document.RootElement.Deserialize<Event>(JsonOptions);
         }
         catch (JsonException ex)

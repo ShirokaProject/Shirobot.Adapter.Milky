@@ -26,7 +26,7 @@ public sealed class MilkyCompatibilityTests
         Assert.NotNull(attribute);
         Assert.Equal("milky", attribute.Id);
         Assert.Equal("milky", attribute.Protocol);
-        Assert.Equal("2.0.1", attribute.Version);
+        Assert.Equal("2.1.0", attribute.Version);
         Assert.Equal(">=1.2.0 <1.4.0", attribute.ProtocolVersionRange);
     }
 
@@ -301,6 +301,112 @@ public sealed class MilkyCompatibilityTests
             """{"type":"future_notification","value":1}""",
             MilkyJson.JsonOptions);
         Assert.Equal("future_notification", Assert.IsType<UnknownMilkyGroupNotification>(diagnostic).NotificationType);
+    }
+
+    [Fact]
+    public void Default_config_uses_webhook_and_generates_a_loopback_listener_once()
+    {
+        var config = new MilkyAdapterConfig();
+        Assert.Equal("webhook", config.Protocol);
+
+        Assert.True(AdapterType.EnsureWebhookDefaults(config));
+        var uri = new Uri(config.WebhookUrl);
+        Assert.Equal(OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1", uri.Host);
+        Assert.InRange(uri.Port, 1, 65535);
+        Assert.Equal(48, config.WebhookToken.Length);
+
+        var (url, token) = (config.WebhookUrl, config.WebhookToken);
+        Assert.False(AdapterType.EnsureWebhookDefaults(config));
+        Assert.Equal(url, config.WebhookUrl);
+        Assert.Equal(token, config.WebhookToken);
+        Assert.NotEqual(token, Generate().WebhookToken);
+
+        static MilkyAdapterConfig Generate()
+        {
+            var other = new MilkyAdapterConfig();
+            AdapterType.EnsureWebhookDefaults(other);
+            return other;
+        }
+    }
+
+    [Fact]
+    public void Webhook_defaults_do_not_touch_active_modes_or_configured_values()
+    {
+        var ws = new MilkyAdapterConfig { Protocol = "ws" };
+        Assert.False(AdapterType.EnsureWebhookDefaults(ws));
+        Assert.Empty(ws.WebhookUrl);
+        Assert.Empty(ws.WebhookToken);
+
+        var configured = new MilkyAdapterConfig { WebhookUrl = "http://127.0.0.1:18080/", WebhookToken = "" };
+        Assert.False(AdapterType.EnsureWebhookDefaults(configured));
+        Assert.Equal("http://127.0.0.1:18080/", configured.WebhookUrl);
+        Assert.Empty(configured.WebhookToken);
+    }
+
+    [Fact]
+    public async Task Webhook_learns_self_id_and_reports_the_first_event_once()
+    {
+        var config = new MilkyAdapterConfig();
+        AdapterType.EnsureWebhookDefaults(config);
+        MilkySession.SelfId = null;
+        using var cancellationSource = new CancellationTokenSource();
+        using var client = new HttpClient();
+        var handler = new MilkyEventHandler(client);
+        var events = 0;
+        handler.EventReceived += _ =>
+        {
+            Interlocked.Increment(ref events);
+            return Task.CompletedTask;
+        };
+        var firstEventCalls = 0;
+        var firstEvent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var listenerTask = handler.ReceivingEventUsingWebhookAsync(
+            config.WebhookUrl,
+            config.WebhookToken,
+            cancellationSource.Token,
+            started,
+            onFirstEvent: () =>
+            {
+                Interlocked.Increment(ref firstEventCalls);
+                firstEvent.TrySetResult();
+                return Task.CompletedTask;
+            });
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            const string payload = """
+                {"event_type":"group_disband","time":10,"self_id":20,"data":{"group_id":30,"operator_id":40}}
+                """;
+
+            using var unauthorized = await client.PostAsync(
+                config.WebhookUrl, new StringContent(payload, Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+            for (var i = 0; i < 2; i++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, config.WebhookUrl)
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Authorization = new("Bearer", config.WebhookToken);
+                using var response = await client.SendAsync(request);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            }
+
+            await firstEvent.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+            Assert.Equal(1, firstEventCalls);
+            Assert.Equal(2, events);
+            Assert.Equal("20", MilkySession.SelfId);
+        }
+        finally
+        {
+            cancellationSource.Cancel();
+            await listenerTask.WaitAsync(TimeSpan.FromSeconds(5));
+            MilkySession.SelfId = null;
+        }
     }
 
     [Fact]

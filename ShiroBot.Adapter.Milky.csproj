@@ -25,7 +25,7 @@
     <ItemGroup>
         <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),随适配器一起打包 -->
         <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
-        <PackageReference Include="ShiroBot.SDK" Version="0.9.1" />
+        <PackageReference Include="ShiroBot.SDK" Version="0.9.4" />
     </ItemGroup>
 
     <Target Name="CopyAdapterToHost"

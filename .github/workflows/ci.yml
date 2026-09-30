@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_FILE: ShiroBot.MilkyAdapter.csproj
+  PROJECT_FILE: ShiroBot.Adapter.Milky.csproj
   TEST_PROJECT: tests/ShiroBot.MilkyAdapter.Tests/ShiroBot.MilkyAdapter.Tests.csproj
   PUBLISH_DIR: artifacts/publish
 
@@ -44,8 +44,8 @@ jobs:
         run: |
           shopt -s nullglob
           dlls=("$PUBLISH_DIR"/*.dll)
-          if [ "${#dlls[@]}" -ne 1 ] || [ "${dlls[0]:-}" != "$PUBLISH_DIR/ShiroBot.MilkyAdapter.dll" ]; then
-            printf 'Expected only %s/ShiroBot.MilkyAdapter.dll\n' "$PUBLISH_DIR"
+          if [ "${#dlls[@]}" -ne 1 ] || [ "${dlls[0]:-}" != "$PUBLISH_DIR/ShiroBot.Adapter.Milky.dll" ]; then
+            printf 'Expected only %s/ShiroBot.Adapter.Milky.dll\n' "$PUBLISH_DIR"
             printf '%s\n' "${dlls[@]}"
             exit 1
           fi
