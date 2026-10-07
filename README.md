@@ -1,5 +1,7 @@
 # ShiroBot Milky Adapter
 
+当前发布：`v2.2.0`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
+
 ShiroBot 的 Milky 协议适配器，支持 HTTP API 调用以及 WebSocket、SSE、Webhook 事件接收。
 
 - Milky 协议版本：**1.3.0**（兼容 1.2.x - 1.3.x）
