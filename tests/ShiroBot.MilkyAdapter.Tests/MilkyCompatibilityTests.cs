@@ -19,14 +19,14 @@ namespace ShiroBot.MilkyAdapter.Tests;
 public sealed class MilkyCompatibilityTests
 {
     [Fact]
-    public void Adapter_declares_sdk_090_metadata_attribute()
+    public void Adapter_declares_consistent_metadata_attribute()
     {
         var attribute = typeof(AdapterType).GetCustomAttribute<BotAdapterAttribute>();
 
         Assert.NotNull(attribute);
         Assert.Equal("milky", attribute.Id);
         Assert.Equal("milky", attribute.Protocol);
-        Assert.Equal("2.1.0", attribute.Version);
+        Assert.Equal(typeof(AdapterType).Assembly.GetName().Version!.ToString(3), attribute.Version);
         Assert.Equal(">=1.2.0 <1.4.0", attribute.ProtocolVersionRange);
     }
 
