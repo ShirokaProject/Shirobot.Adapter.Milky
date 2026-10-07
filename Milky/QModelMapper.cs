@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShiroBot.Model.QQ;
 using Mk = ShiroBot.Adapter.Milky.Model.Common;
 
@@ -13,7 +14,7 @@ internal static class QModelMapper
 
     public static QFriend ToQq(Mk.FriendEntity friend) => new()
     {
-        UserId = friend.UserId,
+        UserId = friend.UserId.ToString(CultureInfo.InvariantCulture),
         Nickname = friend.Nickname,
         Sex = ToQq(friend.Sex),
         Qid = string.IsNullOrEmpty(friend.Qid) ? null : friend.Qid,
@@ -23,7 +24,7 @@ internal static class QModelMapper
 
     public static QGroup ToQq(Mk.GroupEntity group) => new()
     {
-        GroupId = group.GroupId,
+        GroupId = group.GroupId.ToString(CultureInfo.InvariantCulture),
         GroupName = group.GroupName,
         MemberCount = group.MemberCount,
         MaxMemberCount = group.MaxMemberCount,
@@ -36,9 +37,9 @@ internal static class QModelMapper
 
     public static QGroupMember ToQq(Mk.GroupMemberEntity member) => new()
     {
-        UserId = member.UserId,
+        UserId = member.UserId.ToString(CultureInfo.InvariantCulture),
         Nickname = member.Nickname,
-        GroupId = member.GroupId,
+        GroupId = member.GroupId.ToString(CultureInfo.InvariantCulture),
         Sex = member.Sex switch
         {
             Mk.GroupMemberEntitySex.Male => QSex.Male,
@@ -52,7 +53,8 @@ internal static class QModelMapper
         {
             Mk.GroupMemberEntityRole.Owner => QGroupRole.Owner,
             Mk.GroupMemberEntityRole.Admin => QGroupRole.Admin,
-            _ => QGroupRole.Member
+            Mk.GroupMemberEntityRole.Member => QGroupRole.Member,
+            _ => QGroupRole.Unknown
         },
         JoinTime = member.JoinTime == 0 ? null : DateTimeOffset.FromUnixTimeSeconds(member.JoinTime),
         LastSentTime = member.LastSentTime == 0 ? null : DateTimeOffset.FromUnixTimeSeconds(member.LastSentTime),
@@ -68,24 +70,41 @@ internal static class QModelMapper
         _ => QSex.Unknown
     };
 
+    internal static QGroupJoinRequest? ToJoinRequest(Mk.GroupNotification notification) => notification switch
+    {
+        Mk.JoinRequestGroupNotification x => new QGroupJoinRequest
+        {
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture), UserId = x.InitiatorId.ToString(CultureInfo.InvariantCulture),
+            RequestId = x.NotificationSeq.ToString(CultureInfo.InvariantCulture), Comment = x.Comment, IsFiltered = x.IsFiltered,
+            State = x.State.ToString() switch { "Accepted" => QRequestState.Accepted, "Rejected" => QRequestState.Rejected, "Ignored" => QRequestState.Ignored, _ => QRequestState.Pending }
+        },
+        Mk.InvitedJoinRequestGroupNotification x => new QGroupJoinRequest
+        {
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture), UserId = x.TargetUserId.ToString(CultureInfo.InvariantCulture),
+            RequestId = x.NotificationSeq.ToString(CultureInfo.InvariantCulture), IsInvited = true,
+            InviterId = x.InitiatorId.ToString(CultureInfo.InvariantCulture), State = x.State.ToString() switch { "Accepted" => QRequestState.Accepted, "Rejected" => QRequestState.Rejected, "Ignored" => QRequestState.Ignored, _ => QRequestState.Pending }
+        },
+        _ => null
+    };
+
     // ─── 入站消息 ───
 
     public static QIncomingMessage? ToQq(Mk.IncomingMessage message) => message switch
     {
         Mk.FriendIncomingMessage friend => new QFriendMessage
         {
-            PeerId = friend.PeerId,
-            MessageSeq = friend.MessageSeq,
-            SenderId = friend.SenderId,
+            PeerId = friend.PeerId.ToString(CultureInfo.InvariantCulture),
+            MessageId = friend.MessageSeq.ToString(CultureInfo.InvariantCulture),
+            SenderId = friend.SenderId.ToString(CultureInfo.InvariantCulture),
             Time = DateTimeOffset.FromUnixTimeSeconds(friend.Time),
             Segments = ToQq(friend.Segments),
             Friend = ToQq(friend.Friend)
         },
         Mk.GroupIncomingMessage group => new QGroupMessage
         {
-            PeerId = group.PeerId,
-            MessageSeq = group.MessageSeq,
-            SenderId = group.SenderId,
+            PeerId = group.PeerId.ToString(CultureInfo.InvariantCulture),
+            MessageId = group.MessageSeq.ToString(CultureInfo.InvariantCulture),
+            SenderId = group.SenderId.ToString(CultureInfo.InvariantCulture),
             Time = DateTimeOffset.FromUnixTimeSeconds(group.Time),
             Segments = ToQq(group.Segments),
             Group = ToQq(group.Group),
@@ -93,9 +112,9 @@ internal static class QModelMapper
         },
         Mk.TempIncomingMessage temp => new QTempMessage
         {
-            PeerId = temp.PeerId,
-            MessageSeq = temp.MessageSeq,
-            SenderId = temp.SenderId,
+            PeerId = temp.PeerId.ToString(CultureInfo.InvariantCulture),
+            MessageId = temp.MessageSeq.ToString(CultureInfo.InvariantCulture),
+            SenderId = temp.SenderId.ToString(CultureInfo.InvariantCulture),
             Time = DateTimeOffset.FromUnixTimeSeconds(temp.Time),
             Segments = ToQq(temp.Segments),
             Group = temp.Group is null ? null : ToQq(temp.Group)
@@ -111,12 +130,12 @@ internal static class QModelMapper
     public static QIncomingSegment ToQq(Mk.IncomingSegment segment) => segment switch
     {
         Mk.TextIncomingSegment text => new QIncomingText(text.Text),
-        Mk.MentionIncomingSegment mention => new QIncomingMention(mention.UserId, mention.Name),
+        Mk.MentionIncomingSegment mention => new QIncomingMention(mention.UserId.ToString(CultureInfo.InvariantCulture), mention.Name),
         Mk.MentionAllIncomingSegment => new QIncomingMentionAll(),
         Mk.FaceIncomingSegment face => new QIncomingFace(face.FaceId, face.IsLarge),
-        Mk.ReplyIncomingSegment reply => new QIncomingReply(reply.MessageSeq)
+        Mk.ReplyIncomingSegment reply => new QIncomingReply(reply.MessageSeq.ToString(CultureInfo.InvariantCulture))
         {
-            SenderId = reply.SenderId,
+            SenderId = reply.SenderId.ToString(CultureInfo.InvariantCulture),
             SenderName = reply.SenderName,
             Time = DateTimeOffset.FromUnixTimeSeconds(reply.Time),
             Segments = ToQq(reply.Segments)
@@ -163,10 +182,10 @@ internal static class QModelMapper
     public static Mk.OutgoingSegment ToMilky(QOutgoingSegment segment) => segment switch
     {
         QOutgoingText text => new Mk.TextOutgoingSegment(text.Text),
-        QOutgoingMention mention => new Mk.MentionOutgoingSegment(mention.UserId),
+        QOutgoingMention mention => new Mk.MentionOutgoingSegment(MilkyMapper.ParseId(mention.UserId, "UserId")),
         QOutgoingMentionAll => new Mk.MentionAllOutgoingSegment(),
         QOutgoingFace face => new Mk.FaceOutgoingSegment(face.FaceId, face.IsLarge),
-        QOutgoingReply reply => new Mk.ReplyOutgoingSegment(reply.MessageSeq),
+        QOutgoingReply reply => new Mk.ReplyOutgoingSegment(MilkyMapper.ParseId(reply.MessageId, "MessageId")),
         QOutgoingImage image => new Mk.ImageOutgoingSegment(
             image.Uri,
             string.Equals(image.SubType, "sticker", StringComparison.OrdinalIgnoreCase)
@@ -179,7 +198,7 @@ internal static class QModelMapper
         QOutgoingForward forward => new Mk.ForwardOutgoingSegment(
             forward.Messages
                 .Select(message => new Mk.OutgoingForwardedMessage(
-                    message.UserId,
+                    MilkyMapper.ParseId(message.UserId, "UserId"),
                     message.SenderName,
                     message.Segments.Select(ToMilky).ToArray(),
                     message.Time?.ToUnixTimeSeconds()))
@@ -199,41 +218,41 @@ internal static class QModelMapper
         Mk.MessageRecallEvent x => new QMessageRecall
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
             Scene = x.MessageScene switch
             {
                 Mk.MessageRecallEventMessageScene.Group => QMessageScene.Group,
                 Mk.MessageRecallEventMessageScene.Temp => QMessageScene.Temp,
                 _ => QMessageScene.Friend
             },
-            PeerId = x.PeerId,
-            MessageSeq = x.MessageSeq,
-            SenderId = x.SenderId,
-            OperatorId = x.OperatorId,
+            PeerId = x.PeerId.ToString(CultureInfo.InvariantCulture),
+            MessageId = x.MessageSeq.ToString(CultureInfo.InvariantCulture),
+            SenderId = x.SenderId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture),
             DisplaySuffix = x.DisplaySuffix
         },
         Mk.GroupMemberIncreaseEvent x => new QGroupMemberIncrease
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
-            OperatorId = x.OperatorId,
-            InvitorId = x.InvitorId
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId?.ToString(CultureInfo.InvariantCulture),
+            InvitorId = x.InvitorId?.ToString(CultureInfo.InvariantCulture)
         },
         Mk.GroupMemberDecreaseEvent x => new QGroupMemberDecrease
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
-            OperatorId = x.OperatorId
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId?.ToString(CultureInfo.InvariantCulture)
         },
         Mk.FriendRequestEvent x => new QFriendRequestReceived
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            InitiatorId = x.InitiatorId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            InitiatorId = x.InitiatorId.ToString(CultureInfo.InvariantCulture),
             InitiatorUid = x.InitiatorUid,
             Comment = x.Comment,
             Via = x.Via
@@ -241,23 +260,23 @@ internal static class QModelMapper
         Mk.GroupInvitationEvent x => new QGroupInvitation
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            InvitationSeq = x.InvitationSeq,
-            InitiatorId = x.InitiatorId,
-            SourceGroupId = x.SourceGroupId
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            InvitationId = x.InvitationSeq.ToString(CultureInfo.InvariantCulture),
+            InitiatorId = x.InitiatorId.ToString(CultureInfo.InvariantCulture),
+            SourceGroupId = x.SourceGroupId?.ToString(CultureInfo.InvariantCulture)
         },
         Mk.BotOfflineEvent x => new QBotOffline
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
             Reason = x.Reason
         },
         Mk.FriendNudgeEvent x => new QFriendNudge
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            UserId = x.UserId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
             IsSelfSend = x.IsSelfSend,
             IsSelfReceive = x.IsSelfReceive,
             DisplayAction = x.DisplayAction,
@@ -267,8 +286,8 @@ internal static class QModelMapper
         Mk.FriendFileUploadEvent x => new QFriendFileUpload
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            UserId = x.UserId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
             FileId = x.FileId,
             FileName = x.FileName,
             FileSize = x.FileSize,
@@ -278,36 +297,36 @@ internal static class QModelMapper
         Mk.GroupAdminChangeEvent x => new QGroupAdminChange
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
-            OperatorId = x.OperatorId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture),
             IsSet = x.IsSet
         },
         Mk.GroupEssenceMessageChangeEvent x => new QGroupEssenceMessageChange
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            MessageSeq = x.MessageSeq,
-            OperatorId = x.OperatorId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            MessageId = x.MessageSeq.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture),
             IsSet = x.IsSet
         },
         Mk.GroupNameChangeEvent x => new QGroupNameChange
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
             NewGroupName = x.NewGroupName,
-            OperatorId = x.OperatorId
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture)
         },
         Mk.GroupMessageReactionEvent x => new QGroupMessageReaction
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
-            MessageSeq = x.MessageSeq,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
+            MessageId = x.MessageSeq.ToString(CultureInfo.InvariantCulture),
             FaceId = x.FaceId,
             ReactionType = x.ReactionType switch
             {
@@ -319,27 +338,27 @@ internal static class QModelMapper
         Mk.GroupMuteEvent x => new QGroupMute
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
-            OperatorId = x.OperatorId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture),
             Duration = TimeSpan.FromSeconds(x.Duration)
         },
         Mk.GroupWholeMuteEvent x => new QGroupWholeMute
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            OperatorId = x.OperatorId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture),
             IsMute = x.IsMute
         },
         Mk.GroupNudgeEvent x => new QGroupNudge
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            SenderId = x.SenderId,
-            ReceiverId = x.ReceiverId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            SenderId = x.SenderId.ToString(CultureInfo.InvariantCulture),
+            ReceiverId = x.ReceiverId.ToString(CultureInfo.InvariantCulture),
             DisplayAction = x.DisplayAction,
             DisplaySuffix = x.DisplaySuffix,
             DisplayActionImgUrl = string.IsNullOrEmpty(x.DisplayActionImgUrl) ? null : x.DisplayActionImgUrl
@@ -347,50 +366,44 @@ internal static class QModelMapper
         Mk.GroupFileUploadEvent x => new QGroupFileUpload
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            UserId = x.UserId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            UserId = x.UserId.ToString(CultureInfo.InvariantCulture),
             FileId = x.FileId,
             FileName = x.FileName,
             FileSize = x.FileSize
         },
         Mk.GroupJoinRequestEvent x => new QGroupJoinRequest
         {
-            Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            NotificationSeq = x.NotificationSeq,
-            InitiatorId = x.InitiatorId,
-            Comment = x.Comment,
-            IsFiltered = x.IsFiltered
+            Time = DateTimeOffset.FromUnixTimeSeconds(x.Time), SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture), UserId = x.InitiatorId.ToString(CultureInfo.InvariantCulture),
+            RequestId = x.NotificationSeq.ToString(CultureInfo.InvariantCulture), Comment = x.Comment, IsFiltered = x.IsFiltered
         },
-        Mk.GroupInvitedJoinRequestEvent x => new QGroupInvitedJoinRequest
+        Mk.GroupInvitedJoinRequestEvent x => new QGroupJoinRequest
         {
-            Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            NotificationSeq = x.NotificationSeq,
-            InitiatorId = x.InitiatorId,
-            TargetUserId = x.TargetUserId
+            Time = DateTimeOffset.FromUnixTimeSeconds(x.Time), SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture), UserId = x.TargetUserId.ToString(CultureInfo.InvariantCulture),
+            RequestId = x.NotificationSeq.ToString(CultureInfo.InvariantCulture), IsInvited = true,
+            InviterId = x.InitiatorId.ToString(CultureInfo.InvariantCulture)
         },
         Mk.GroupDisbandEvent x => new QGroupDisband
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
-            GroupId = x.GroupId,
-            OperatorId = x.OperatorId
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
+            GroupId = x.GroupId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = x.OperatorId.ToString(CultureInfo.InvariantCulture)
         },
         Mk.PeerPinChangeEvent x => new QPeerPinChange
         {
             Time = DateTimeOffset.FromUnixTimeSeconds(x.Time),
-            SelfId = x.SelfId,
+            SelfId = x.SelfId.ToString(CultureInfo.InvariantCulture),
             Scene = x.MessageScene switch
             {
                 Mk.PeerPinChangeEventMessageScene.Group => QMessageScene.Group,
                 Mk.PeerPinChangeEventMessageScene.Temp => QMessageScene.Temp,
                 _ => QMessageScene.Friend
             },
-            PeerId = x.PeerId,
+            PeerId = x.PeerId.ToString(CultureInfo.InvariantCulture),
             IsPinned = x.IsPinned
         },
         _ => null

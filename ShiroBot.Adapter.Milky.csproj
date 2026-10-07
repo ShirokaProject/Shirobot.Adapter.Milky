@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
+        <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == ''">$(MSBuildProjectDirectory)/../../ShiroBot</ShiroBotSourceRoot>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -13,11 +14,16 @@
         <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
     </PropertyGroup>
 
+    <Import Project="$(ShiroBotSourceRoot)/SDK/buildTransitive/ShiroBot.SDK.props" />
+
     <ItemGroup>
         <!-- 子项目目录不参与适配器本体编译 -->
         <Compile Remove="ShiroBot.Model/**/*.cs" />
         <Compile Remove="MilkyModelGenerator.Net/**/*.cs" />
         <Compile Remove="tests/**/*.cs" />
+        <Compile Remove="shirobot-host/**/*.cs" />
+        <EmbeddedResource Remove="shirobot-host/**/*" />
+        <None Remove="shirobot-host/**/*" />
         <EmbeddedResource Remove="tests/**/*" />
         <None Remove="tests/**/*" />
     </ItemGroup>
@@ -25,12 +31,13 @@
     <ItemGroup>
         <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),随适配器一起打包 -->
         <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
-        <PackageReference Include="ShiroBot.SDK" Version="0.9.4" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)/SDK/ShiroBot.SDK.csproj" Private="false" />
+        <ProjectReference Include="$(ShiroBotSourceRoot)/Models/QQ/ShiroBot.Model.QQ.csproj" Private="false" />
     </ItemGroup>
 
     <Target Name="CopyAdapterToHost"
             AfterTargets="Build"
-            Condition="'$(Configuration)'=='Debug'">
+            Condition="'$(Configuration)'=='Debug' and '$(CopyAdapterToHost)'!='false'">
         <RemoveDir Directories="$(MSBuildProjectDirectory)\..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\adapters\ShiroBot.MilkyAdapter" />
         <MakeDir Directories="$(HostAdapterDir)" />
 
@@ -44,4 +51,5 @@
               SkipUnchangedFiles="true" />
     </Target>
 
+    <Import Project="$(ShiroBotSourceRoot)/SDK/buildTransitive/ShiroBot.SDK.targets" />
 </Project>

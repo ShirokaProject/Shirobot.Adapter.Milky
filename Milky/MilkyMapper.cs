@@ -39,7 +39,8 @@ internal static class MilkyMapper
             {
                 Mk.GroupMemberEntityRole.Owner => MemberRole.Owner,
                 Mk.GroupMemberEntityRole.Admin => MemberRole.Admin,
-                _ => MemberRole.Member
+                Mk.GroupMemberEntityRole.Member => MemberRole.Member,
+                _ => MemberRole.Unknown
             },
             JoinedAt = DateTimeOffset.FromUnixTimeSeconds(member.JoinTime)
         };
@@ -93,6 +94,7 @@ internal static class MilkyMapper
 
     private static MessageSegment ToSegment(Mk.IncomingSegment segment) => segment switch
     {
+        Mk.MarkdownIncomingSegment markdown => new MarkdownSegment(markdown.Content),
         Mk.TextIncomingSegment text => new TextSegment(text.Text),
         Mk.MentionIncomingSegment mention => new MentionSegment(mention.UserId.ToString()) { DisplayName = mention.Name },
         Mk.MentionAllIncomingSegment => new MentionAllSegment(),
@@ -158,6 +160,16 @@ internal static class MilkyMapper
     public static Sdk.BotEvent? ToBotEvent(Mk.Event e) => e switch
     {
         Mk.IncomingMessage message => ToMessageEvent(message),
+
+        Mk.GroupMessageReactionEvent reaction => new MessageReactionEvent
+        {
+            Platform = PlatformId, SelfId = reaction.SelfId.ToString(), Kind = "group_message_reaction",
+            Channel = GroupChannel(reaction.GroupId), MessageId = reaction.MessageSeq.ToString(),
+            Emoji = reaction.ReactionType == Mk.GroupMessageReactionEventReactionType.Emoji
+                ? new UnicodeReactionEmoji(reaction.FaceId) : new PlatformReactionEmoji(reaction.FaceId, string.Empty),
+            User = new User(reaction.UserId.ToString()), IsAdded = reaction.IsAdd,
+            Raw = QModelMapper.ToQqEventPayload(reaction)
+        },
 
         Mk.MessageRecallEvent recall => new MessageDeletedEvent
         {
@@ -247,7 +259,7 @@ internal static class MilkyMapper
         Mk.GroupNudgeEvent => "group_nudge",
         Mk.GroupFileUploadEvent => "group_file_upload",
         Mk.GroupJoinRequestEvent => "group_join_request",
-        Mk.GroupInvitedJoinRequestEvent => "group_invited_join_request",
+        Mk.GroupInvitedJoinRequestEvent => QEventKinds.GroupJoinRequest,
         Mk.GroupDisbandEvent => "group_disband",
         Mk.PeerPinChangeEvent => "peer_pin_change",
         _ => ToSnakeCase(e.GetType().Name.TrimEnd("Event"))

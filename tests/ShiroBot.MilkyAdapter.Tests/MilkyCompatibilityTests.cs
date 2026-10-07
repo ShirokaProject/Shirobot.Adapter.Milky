@@ -95,7 +95,7 @@ public sealed class MilkyCompatibilityTests
 
         var message = Assert.IsType<MessageEvent>(received);
         var raw = Assert.IsType<QTempMessage>(message.Raw);
-        Assert.Equal(300, raw.PeerId);
+        Assert.Equal("300", raw.PeerId);
         Assert.Equal("300", message.Channel.Id);
         Assert.Equal(ChannelType.Other, message.Channel.Type);
     }
@@ -107,7 +107,7 @@ public sealed class MilkyCompatibilityTests
                                   {"status":"failed","retcode":0,"message":"rejected","data":{"reason":"future"}}
                                   """);
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(
             () => client.RequestAsync<ProbeRequest, JsonElement>(new ProbeRequest("value")));
 
         Assert.Contains("status=failed", exception.Message);
@@ -120,7 +120,7 @@ public sealed class MilkyCompatibilityTests
                                   {"status":"failed","retcode":-400,"message":"bad request"}
                                   """);
 
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(
+        var exception = await Assert.ThrowsAnyAsync<HttpRequestException>(
             () => client.RequestAsync(new ProbeRequest("value")));
 
         Assert.Contains("retcode=-400", exception.Message);

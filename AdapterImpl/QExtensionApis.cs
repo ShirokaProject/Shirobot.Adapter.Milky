@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShiroBot.Adapter.Milky.Milky;
 using ShiroBot.Adapter.Milky.Model.File.Requests;
 using ShiroBot.Adapter.Milky.Model.File.Responses;
@@ -10,6 +11,8 @@ using ShiroBot.Adapter.Milky.Model.Message.Responses;
 using ShiroBot.Adapter.Milky.Model.System.Requests;
 using ShiroBot.Adapter.Milky.Model.System.Responses;
 using ShiroBot.Model.QQ;
+using ShiroBot.SDK.Adapter;
+using ShiroBot.SDK.Models;
 using Mk = ShiroBot.Adapter.Milky.Model.Common;
 
 namespace ShiroBot.Adapter.Milky.AdapterImpl;
@@ -21,26 +24,26 @@ public sealed class QFriendApi : IQFriendApi
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public Task SendNudgeAsync(long userId, bool isSelf = false) =>
-        Milky.RequestAsync(new SendFriendNudgeRequest(userId, isSelf));
+    public Task SendNudgeAsync(string userId, bool isSelf = false, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SendFriendNudgeRequest(MilkyMapper.ParseId(userId, "userId"), isSelf), cancellationToken: cancellationToken);
 
-    public Task SendProfileLikeAsync(long userId, int count = 1) =>
-        Milky.RequestAsync(new SendProfileLikeRequest(userId, count));
+    public Task SendProfileLikeAsync(string userId, int count = 1, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SendProfileLikeRequest(MilkyMapper.ParseId(userId, "userId"), count), cancellationToken: cancellationToken);
 
-    public Task DeleteFriendAsync(long userId) =>
-        Milky.RequestAsync(new DeleteFriendRequest(userId));
+    public Task DeleteFriendAsync(string userId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new DeleteFriendRequest(MilkyMapper.ParseId(userId, "userId")), cancellationToken: cancellationToken);
 
-    public async Task<IReadOnlyList<QFriendRequest>> GetFriendRequestsAsync(int limit = 20, bool isFiltered = false)
+    public async Task<IReadOnlyList<QFriendRequest>> GetFriendRequestsAsync(int limit = 20, bool isFiltered = false, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetFriendRequestsRequest, GetFriendRequestsResponse>(
-            new GetFriendRequestsRequest(limit, isFiltered));
+            new GetFriendRequestsRequest(limit, isFiltered), cancellationToken: cancellationToken);
         return response.Requests
             .Select(request => new QFriendRequest
             {
                 Time = DateTimeOffset.FromUnixTimeSeconds(request.Time),
-                InitiatorId = request.InitiatorId,
+                InitiatorId = request.InitiatorId.ToString(CultureInfo.InvariantCulture),
                 InitiatorUid = request.InitiatorUid,
-                TargetUserId = request.TargetUserId,
+                TargetUserId = request.TargetUserId.ToString(CultureInfo.InvariantCulture),
                 TargetUserUid = request.TargetUserUid,
                 State = ToQqState(request.State),
                 Comment = string.IsNullOrEmpty(request.Comment) ? null : request.Comment,
@@ -50,11 +53,11 @@ public sealed class QFriendApi : IQFriendApi
             .ToArray();
     }
 
-    public Task AcceptFriendRequestAsync(string initiatorUid, bool isFiltered = false) =>
-        Milky.RequestAsync(new AcceptFriendRequestRequest(initiatorUid, isFiltered));
+    public Task AcceptFriendRequestAsync(string initiatorUid, bool isFiltered = false, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new AcceptFriendRequestRequest(initiatorUid, isFiltered), cancellationToken: cancellationToken);
 
-    public Task RejectFriendRequestAsync(string initiatorUid, bool isFiltered = false, string? reason = null) =>
-        Milky.RequestAsync(new RejectFriendRequestRequest(initiatorUid, isFiltered, reason));
+    public Task RejectFriendRequestAsync(string initiatorUid, bool isFiltered = false, string? reason = null, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new RejectFriendRequestRequest(initiatorUid, isFiltered, reason), cancellationToken: cancellationToken);
 
     private static QRequestState ToQqState(Mk.FriendRequestState state) => state switch
     {
@@ -66,64 +69,121 @@ public sealed class QFriendApi : IQFriendApi
 }
 
 /// <summary>IQGroupApi 的 Milky 实现。</summary>
-public sealed class QGroupApi : IQGroupApi
+public sealed class QGroupApi(MilkyClient? client = null) : IQGroupApi, IMessageReactionService
 {
-    private static MilkyClient Milky => MilkyClientManager.Instance;
+    public QGroupCapabilities Capabilities => QGroupCapabilities.Rename | QGroupCapabilities.Avatar
+        | QGroupCapabilities.MemberCard | QGroupCapabilities.MemberTitle | QGroupCapabilities.MemberAdmin
+        | QGroupCapabilities.MemberMute | QGroupCapabilities.WholeMute | QGroupCapabilities.Kick
+        | QGroupCapabilities.Quit | QGroupCapabilities.Nudge | QGroupCapabilities.Reaction
+        | QGroupCapabilities.Announcement | QGroupCapabilities.Essence | QGroupCapabilities.JoinRequests
+        | QGroupCapabilities.Notifications | QGroupCapabilities.Invitations | QGroupCapabilities.BatchMute
+        | QGroupCapabilities.GroupList | QGroupCapabilities.GroupInfo | QGroupCapabilities.Members;
+    private MilkyClient Milky => client ?? MilkyClientManager.Instance;
 
-    public Task SetGroupNameAsync(long groupId, string name) =>
-        Milky.RequestAsync(new SetGroupNameRequest(groupId, name));
+    public ReactionCapabilities GetReactionCapabilities(Channel channel) => channel.Type == ChannelType.Group
+        ? ReactionCapabilities.Unicode | ReactionCapabilities.PlatformEmoji : ReactionCapabilities.None;
 
-    public Task SetGroupAvatarAsync(long groupId, string imageUri) =>
-        Milky.RequestAsync(new SetGroupAvatarRequest(groupId, ResourceUriConverter.Convert(imageUri)));
+    public Task SetReactionAsync(MessageReference message, ReactionEmoji emoji, bool isAdd = true, CancellationToken cancellationToken = default)
+    {
+        if (message.Channel.Type != ChannelType.Group) throw new NotSupportedException("Milky reactions require a group message.");
+        if (emoji is PlatformReactionEmoji custom)
+        {
+            if (!string.Equals(custom.InstanceId, message.InstanceId, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Platform emoji belongs to a different instance.");
+            if (custom.GuildId is not null && custom.GuildId != message.Channel.GuildId && custom.GuildId != message.Channel.Id) throw new ArgumentException("Platform emoji belongs to a different guild.");
+            ArgumentException.ThrowIfNullOrWhiteSpace(custom.Id);
+            return SendMessageReactionAsync(message.Channel.Id, message.MessageId, custom.Id, QReactionType.Face, isAdd, cancellationToken);
+        }
+        if (emoji is UnicodeReactionEmoji unicode)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(unicode.Value);
+            if (System.Globalization.StringInfo.ParseCombiningCharacters(unicode.Value).Length != 1) throw new ArgumentException("Unicode reaction must contain one grapheme.");
+            return SendMessageReactionAsync(message.Channel.Id, message.MessageId, unicode.Value, QReactionType.Emoji, isAdd, cancellationToken);
+        }
+        throw new NotSupportedException("Unknown reaction emoji kind.");
+    }
 
-    public Task SetMemberCardAsync(long groupId, long userId, string card) =>
-        Milky.RequestAsync(new SetGroupMemberCardRequest(groupId, userId, card));
+    public async Task<IReadOnlyList<QGroup>> GetGroupListAsync(bool noCache = false, CancellationToken cancellationToken = default)
+    {
+        var response = await Milky.RequestAsync<GetGroupListRequest, GetGroupListResponse>(
+            new GetGroupListRequest(noCache), cancellationToken);
+        return response.Groups.Select(QModelMapper.ToQq).ToArray();
+    }
 
-    public Task SetMemberSpecialTitleAsync(long groupId, long userId, string title) =>
-        Milky.RequestAsync(new SetGroupMemberSpecialTitleRequest(groupId, userId, title));
+    public async Task<QGroup> GetGroupInfoAsync(string groupId, bool noCache = false, CancellationToken cancellationToken = default)
+    {
+        var response = await Milky.RequestAsync<GetGroupInfoRequest, GetGroupInfoResponse>(
+            new GetGroupInfoRequest(MilkyMapper.ParseId(groupId, "groupId"), noCache), cancellationToken);
+        return QModelMapper.ToQq(response.Group);
+    }
 
-    public Task SetMemberAdminAsync(long groupId, long userId, bool isSet = true) =>
-        Milky.RequestAsync(new SetGroupMemberAdminRequest(groupId, userId, isSet));
+    public async Task<IReadOnlyList<QGroupMember>> GetGroupMemberListAsync(string groupId, bool noCache = false, CancellationToken cancellationToken = default)
+    {
+        var response = await Milky.RequestAsync<GetGroupMemberListRequest, GetGroupMemberListResponse>(
+            new GetGroupMemberListRequest(MilkyMapper.ParseId(groupId, "groupId"), noCache), cancellationToken);
+        return response.Members.Select(QModelMapper.ToQq).ToArray();
+    }
 
-    public Task MuteMemberAsync(long groupId, long userId, TimeSpan duration) =>
-        Milky.RequestAsync(new SetGroupMemberMuteRequest(groupId, userId, (int)duration.TotalSeconds));
+    public async Task<QGroupMember> GetGroupMemberInfoAsync(string groupId, string userId, bool noCache = false, CancellationToken cancellationToken = default)
+    {
+        var response = await Milky.RequestAsync<GetGroupMemberInfoRequest, GetGroupMemberInfoResponse>(
+            new GetGroupMemberInfoRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), noCache), cancellationToken);
+        return QModelMapper.ToQq(response.Member);
+    }
 
-    public Task SetWholeMuteAsync(long groupId, bool isMute = true) =>
-        Milky.RequestAsync(new SetGroupWholeMuteRequest(groupId, isMute));
+    public Task SetGroupNameAsync(string groupId, string name, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupNameRequest(MilkyMapper.ParseId(groupId, "groupId"), name), cancellationToken: cancellationToken);
 
-    public Task KickMemberAsync(long groupId, long userId, bool rejectAddRequest = false) =>
-        Milky.RequestAsync(new KickGroupMemberRequest(groupId, userId, rejectAddRequest));
+    public Task SetGroupAvatarAsync(string groupId, string imageUri, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupAvatarRequest(MilkyMapper.ParseId(groupId, "groupId"), ResourceUriConverter.Convert(imageUri)), cancellationToken: cancellationToken);
 
-    public Task QuitGroupAsync(long groupId) =>
-        Milky.RequestAsync(new QuitGroupRequest(groupId));
+    public Task SetMemberCardAsync(string groupId, string userId, string card, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupMemberCardRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), card), cancellationToken: cancellationToken);
 
-    public Task SendNudgeAsync(long groupId, long userId) =>
-        Milky.RequestAsync(new SendGroupNudgeRequest(groupId, userId));
+    public Task SetMemberSpecialTitleAsync(string groupId, string userId, string title, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupMemberSpecialTitleRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), title), cancellationToken: cancellationToken);
 
-    public Task SendMessageReactionAsync(long groupId, long messageSeq, string faceId, bool isAdd = true) =>
+    public Task SetMemberAdminAsync(string groupId, string userId, bool isSet = true, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupMemberAdminRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), isSet), cancellationToken: cancellationToken);
+
+    public Task MuteMemberAsync(string groupId, string userId, TimeSpan duration, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupMemberMuteRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), (int)duration.TotalSeconds), cancellationToken: cancellationToken);
+
+    public Task SetWholeMuteAsync(string groupId, bool isMute = true, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupWholeMuteRequest(MilkyMapper.ParseId(groupId, "groupId"), isMute), cancellationToken: cancellationToken);
+
+    public Task KickMemberAsync(string groupId, string userId, bool rejectAddRequest = false, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new KickGroupMemberRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId"), rejectAddRequest), cancellationToken: cancellationToken);
+
+    public Task QuitGroupAsync(string groupId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new QuitGroupRequest(MilkyMapper.ParseId(groupId, "groupId")), cancellationToken: cancellationToken);
+
+    public Task SendNudgeAsync(string groupId, string userId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SendGroupNudgeRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(userId, "userId")), cancellationToken: cancellationToken);
+
+    public Task SendMessageReactionAsync(string groupId, string messageId, string faceId, bool isAdd = true, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new SendGroupMessageReactionRequest(
-            groupId, messageSeq, faceId, SendGroupMessageReactionRequestReactionType.Face, isAdd));
+            MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(messageId, "messageId"), faceId, SendGroupMessageReactionRequestReactionType.Face, isAdd), cancellationToken: cancellationToken);
 
-    public Task SendMessageReactionAsync(long groupId, long messageSeq, string reactionId, QReactionType reactionType, bool isAdd = true) =>
+    public Task SendMessageReactionAsync(string groupId, string messageId, string reactionId, QReactionType reactionType, bool isAdd = true, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new SendGroupMessageReactionRequest(
-            groupId,
-            messageSeq,
+            MilkyMapper.ParseId(groupId, "groupId"),
+            MilkyMapper.ParseId(messageId, "messageId"),
             reactionId,
             reactionType == QReactionType.Emoji
                 ? SendGroupMessageReactionRequestReactionType.Emoji
                 : SendGroupMessageReactionRequestReactionType.Face,
-            isAdd));
+            isAdd), cancellationToken: cancellationToken);
 
-    public async Task<IReadOnlyList<QGroupAnnouncement>> GetAnnouncementsAsync(long groupId)
+    public async Task<IReadOnlyList<QGroupAnnouncement>> GetAnnouncementsAsync(string groupId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupAnnouncementsRequest, GetGroupAnnouncementsResponse>(
-            new GetGroupAnnouncementsRequest(groupId));
+            new GetGroupAnnouncementsRequest(MilkyMapper.ParseId(groupId, "groupId")), cancellationToken: cancellationToken);
         return response.Announcements
             .Select(announcement => new QGroupAnnouncement
             {
-                GroupId = announcement.GroupId,
+                GroupId = announcement.GroupId.ToString(CultureInfo.InvariantCulture),
                 AnnouncementId = announcement.AnnouncementId,
-                UserId = announcement.UserId,
+                UserId = announcement.UserId.ToString(CultureInfo.InvariantCulture),
                 Time = DateTimeOffset.FromUnixTimeSeconds(announcement.Time),
                 Content = announcement.Content,
                 ImageUrl = announcement.ImageUrl
@@ -131,30 +191,30 @@ public sealed class QGroupApi : IQGroupApi
             .ToArray();
     }
 
-    public Task SendAnnouncementAsync(long groupId, string content, string? imageUri = null) =>
+    public Task SendAnnouncementAsync(string groupId, string content, string? imageUri = null, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new SendGroupAnnouncementRequest(
-            groupId, content, imageUri is null ? null : ResourceUriConverter.Convert(imageUri)));
+            MilkyMapper.ParseId(groupId, "groupId"), content, imageUri is null ? null : ResourceUriConverter.Convert(imageUri)), cancellationToken: cancellationToken);
 
-    public Task DeleteAnnouncementAsync(long groupId, string announcementId) =>
-        Milky.RequestAsync(new DeleteGroupAnnouncementRequest(groupId, announcementId));
+    public Task DeleteAnnouncementAsync(string groupId, string announcementId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new DeleteGroupAnnouncementRequest(MilkyMapper.ParseId(groupId, "groupId"), announcementId), cancellationToken: cancellationToken);
 
-    public async Task<IReadOnlyList<QEssenceMessage>> GetEssenceMessagesAsync(long groupId, int pageIndex, int pageSize)
-        => (await GetEssenceMessagesPageAsync(groupId, pageIndex, pageSize)).Messages;
+    public async Task<IReadOnlyList<QEssenceMessage>> GetEssenceMessagesAsync(string groupId, int pageIndex, int pageSize, CancellationToken cancellationToken = default)
+        => (await GetEssenceMessagesPageAsync(groupId, pageIndex, pageSize, cancellationToken)).Messages;
 
     public async Task<(IReadOnlyList<QEssenceMessage> Messages, bool IsEnd)> GetEssenceMessagesPageAsync(
-        long groupId, int pageIndex, int pageSize)
+        string groupId, int pageIndex, int pageSize, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupEssenceMessagesRequest, GetGroupEssenceMessagesResponse>(
-            new GetGroupEssenceMessagesRequest(groupId, pageIndex, pageSize));
+            new GetGroupEssenceMessagesRequest(MilkyMapper.ParseId(groupId, "groupId"), pageIndex, pageSize), cancellationToken: cancellationToken);
         var messages = response.Messages
             .Select(message => new QEssenceMessage
             {
-                GroupId = message.GroupId,
-                MessageSeq = message.MessageSeq,
+                GroupId = message.GroupId.ToString(CultureInfo.InvariantCulture),
+                MessageId = message.MessageSeq.ToString(CultureInfo.InvariantCulture),
                 MessageTime = DateTimeOffset.FromUnixTimeSeconds(message.MessageTime),
-                SenderId = message.SenderId,
+                SenderId = message.SenderId.ToString(CultureInfo.InvariantCulture),
                 SenderName = message.SenderName,
-                OperatorId = message.OperatorId,
+                OperatorId = message.OperatorId.ToString(CultureInfo.InvariantCulture),
                 OperatorName = message.OperatorName,
                 OperationTime = DateTimeOffset.FromUnixTimeSeconds(message.OperationTime),
                 Segments = QModelMapper.ToQq(message.Segments)
@@ -164,48 +224,64 @@ public sealed class QGroupApi : IQGroupApi
         return (messages, response.IsEnd);
     }
 
-    public Task SetEssenceMessageAsync(long groupId, long messageSeq, bool isSet = true) =>
-        Milky.RequestAsync(new SetGroupEssenceMessageRequest(groupId, messageSeq, isSet));
+    public Task SetEssenceMessageAsync(string groupId, string messageId, bool isSet = true, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupEssenceMessageRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(messageId, "messageId"), isSet), cancellationToken: cancellationToken);
 
-    public Task AcceptJoinRequestAsync(QGroupJoinRequest request) =>
-        Milky.RequestAsync(new AcceptGroupRequestRequest(
-            request.NotificationSeq,
-            AcceptGroupRequestRequestNotificationType.JoinRequest,
-            request.GroupId,
-            request.IsFiltered));
+    public Task AcceptJoinRequestAsync(QGroupJoinRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return Milky.RequestAsync(new AcceptGroupRequestRequest(
+            MilkyMapper.ParseId(request.RequestId, "RequestId"),
+            request.IsInvited ? AcceptGroupRequestRequestNotificationType.InvitedJoinRequest : AcceptGroupRequestRequestNotificationType.JoinRequest,
+            MilkyMapper.ParseId(request.GroupId, "GroupId"), request.IsFiltered), cancellationToken);
+    }
 
-    public Task RejectJoinRequestAsync(QGroupJoinRequest request, string? reason = null) =>
-        Milky.RequestAsync(new RejectGroupRequestRequest(
-            request.NotificationSeq,
-            RejectGroupRequestRequestNotificationType.JoinRequest,
-            request.GroupId,
-            request.IsFiltered,
-            reason));
+    public Task RejectJoinRequestAsync(QGroupJoinRequest request, string? reason = null, bool addToBlacklist = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (addToBlacklist) throw new NotSupportedException("Milky does not support rejecting and blacklisting in one operation.");
+        return Milky.RequestAsync(new RejectGroupRequestRequest(
+            MilkyMapper.ParseId(request.RequestId, "RequestId"),
+            request.IsInvited ? RejectGroupRequestRequestNotificationType.InvitedJoinRequest : RejectGroupRequestRequestNotificationType.JoinRequest,
+            MilkyMapper.ParseId(request.GroupId, "GroupId"), request.IsFiltered, reason), cancellationToken);
+    }
 
-    public Task AcceptJoinRequestAsync(long groupId, long notificationSeq, bool isInvited = false, bool isFiltered = false) =>
-        Milky.RequestAsync(new AcceptGroupRequestRequest(
-            notificationSeq,
-            isInvited
-                ? AcceptGroupRequestRequestNotificationType.InvitedJoinRequest
-                : AcceptGroupRequestRequestNotificationType.JoinRequest,
-            groupId,
-            isFiltered));
+    public async Task<QGroupJoinRequestPage> GetJoinRequestsAsync(string groupId, string? cursor = null,
+        int limit = 20, CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(limit));
+        var groupNumber = MilkyMapper.ParseId(groupId, "GroupId");
+        var response = await Milky.RequestAsync<GetGroupNotificationsRequest, GetGroupNotificationsResponse>(
+            new GetGroupNotificationsRequest(cursor is null ? null : MilkyMapper.ParseId(cursor, "Cursor"), false, limit), cancellationToken);
+        var requests = response.Notifications.Select(QModelMapper.ToJoinRequest)
+            .Where(x => x is not null && x.GroupId == groupNumber.ToString(CultureInfo.InvariantCulture)).Cast<QGroupJoinRequest>().ToArray();
+        return new QGroupJoinRequestPage(requests, response.NextNotificationSeq?.ToString(CultureInfo.InvariantCulture));
+    }
 
-    public Task RejectJoinRequestAsync(long groupId, long notificationSeq, bool isInvited = false, bool isFiltered = false, string? reason = null) =>
-        Milky.RequestAsync(new RejectGroupRequestRequest(
-            notificationSeq,
-            isInvited
-                ? RejectGroupRequestRequestNotificationType.InvitedJoinRequest
-                : RejectGroupRequestRequestNotificationType.JoinRequest,
-            groupId,
-            isFiltered,
-            reason));
+    public Task<QBatchOperationResult> SetMemberMutesAsync(string groupId, IReadOnlyList<QMemberMute> members,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+        if (members.Count is < 1 or > 20) throw new ArgumentException("Expected 1 to 20 members.", nameof(members));
+        var groupNumber = MilkyMapper.ParseId(groupId, "GroupId");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var member in members)
+        {
+            ArgumentNullException.ThrowIfNull(member);
+            var numericId = MilkyMapper.ParseId(member.UserId, "UserId").ToString(CultureInfo.InvariantCulture);
+            if (!ids.Add(numericId)) throw new ArgumentException("Duplicate user ID.", nameof(members));
+            if (member.Duration < TimeSpan.Zero || member.Duration > TimeSpan.FromDays(30)) throw new ArgumentOutOfRangeException(nameof(members));
+        }
+        return QBatchMuteExecutor.ExecuteAsync(members,
+            (member, token) => Milky.RequestAsync(new SetGroupMemberMuteRequest(groupNumber, MilkyMapper.ParseId(member.UserId, "UserId"), checked((int)member.Duration.TotalSeconds)), token), ex => ex is MilkyApiException, cancellationToken);
+    }
 
-    public async Task<(IReadOnlyList<QGroupNotification> Notifications, long? NextNotificationSeq)> GetNotificationsAsync(
-        long? startNotificationSeq = null, bool isFiltered = false, int limit = 20)
+    public async Task<(IReadOnlyList<QGroupNotification> Notifications, string? NextCursor)> GetNotificationsAsync(
+        string? cursor = null, bool isFiltered = false, int limit = 20, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupNotificationsRequest, GetGroupNotificationsResponse>(
-            new GetGroupNotificationsRequest(startNotificationSeq, isFiltered, limit));
+            new GetGroupNotificationsRequest(cursor is null ? null : MilkyMapper.ParseId(cursor, "Cursor"), isFiltered, limit), cancellationToken: cancellationToken);
 
         var notifications = response.Notifications
             .Select(ToQqNotification)
@@ -213,33 +289,33 @@ public sealed class QGroupApi : IQGroupApi
             .Cast<QGroupNotification>()
             .ToArray();
 
-        return (notifications, response.NextNotificationSeq);
+        return (notifications, response.NextNotificationSeq?.ToString(CultureInfo.InvariantCulture));
     }
 
-    public Task AcceptInvitationAsync(long groupId, long invitationSeq) =>
-        Milky.RequestAsync(new AcceptGroupInvitationRequest(groupId, invitationSeq));
+    public Task AcceptInvitationAsync(string groupId, string invitationId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new AcceptGroupInvitationRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(invitationId, "invitationId")), cancellationToken: cancellationToken);
 
-    public Task RejectInvitationAsync(long groupId, long invitationSeq) =>
-        Milky.RequestAsync(new RejectGroupInvitationRequest(groupId, invitationSeq));
+    public Task RejectInvitationAsync(string groupId, string invitationId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new RejectGroupInvitationRequest(MilkyMapper.ParseId(groupId, "groupId"), MilkyMapper.ParseId(invitationId, "invitationId")), cancellationToken: cancellationToken);
 
     private static QGroupNotification? ToQqNotification(Mk.GroupNotification notification) => notification switch
     {
         Mk.JoinRequestGroupNotification join => new QJoinRequestNotification
         {
-            GroupId = join.GroupId,
-            NotificationSeq = join.NotificationSeq,
-            InitiatorId = join.InitiatorId,
+            GroupId = join.GroupId.ToString(CultureInfo.InvariantCulture),
+            NotificationId = join.NotificationSeq.ToString(CultureInfo.InvariantCulture),
+            InitiatorId = join.InitiatorId.ToString(CultureInfo.InvariantCulture),
             State = ToQqState(join.State),
             Comment = string.IsNullOrEmpty(join.Comment) ? null : join.Comment,
             IsFiltered = join.IsFiltered,
-            OperatorId = join.OperatorId
+            OperatorId = join.OperatorId?.ToString(CultureInfo.InvariantCulture)
         },
         Mk.InvitedJoinRequestGroupNotification invited => new QInvitedJoinRequestNotification
         {
-            GroupId = invited.GroupId,
-            NotificationSeq = invited.NotificationSeq,
-            InitiatorId = invited.InitiatorId,
-            TargetUserId = invited.TargetUserId,
+            GroupId = invited.GroupId.ToString(CultureInfo.InvariantCulture),
+            NotificationId = invited.NotificationSeq.ToString(CultureInfo.InvariantCulture),
+            InitiatorId = invited.InitiatorId.ToString(CultureInfo.InvariantCulture),
+            TargetUserId = invited.TargetUserId.ToString(CultureInfo.InvariantCulture),
             State = invited.State switch
             {
                 Mk.InvitedJoinRequestGroupNotificationState.Accepted => QRequestState.Accepted,
@@ -247,28 +323,28 @@ public sealed class QGroupApi : IQGroupApi
                 Mk.InvitedJoinRequestGroupNotificationState.Ignored => QRequestState.Ignored,
                 _ => QRequestState.Pending
             },
-            OperatorId = invited.OperatorId
+            OperatorId = invited.OperatorId?.ToString(CultureInfo.InvariantCulture)
         },
         Mk.AdminChangeGroupNotification admin => new QAdminChangeNotification
         {
-            GroupId = admin.GroupId,
-            NotificationSeq = admin.NotificationSeq,
-            TargetUserId = admin.TargetUserId,
+            GroupId = admin.GroupId.ToString(CultureInfo.InvariantCulture),
+            NotificationId = admin.NotificationSeq.ToString(CultureInfo.InvariantCulture),
+            TargetUserId = admin.TargetUserId.ToString(CultureInfo.InvariantCulture),
             IsSet = admin.IsSet,
-            OperatorId = admin.OperatorId
+            OperatorId = admin.OperatorId.ToString(CultureInfo.InvariantCulture)
         },
         Mk.KickGroupNotification kick => new QKickNotification
         {
-            GroupId = kick.GroupId,
-            NotificationSeq = kick.NotificationSeq,
-            TargetUserId = kick.TargetUserId,
-            OperatorId = kick.OperatorId
+            GroupId = kick.GroupId.ToString(CultureInfo.InvariantCulture),
+            NotificationId = kick.NotificationSeq.ToString(CultureInfo.InvariantCulture),
+            TargetUserId = kick.TargetUserId.ToString(CultureInfo.InvariantCulture),
+            OperatorId = kick.OperatorId.ToString(CultureInfo.InvariantCulture)
         },
         Mk.QuitGroupNotification quit => new QQuitNotification
         {
-            GroupId = quit.GroupId,
-            NotificationSeq = quit.NotificationSeq,
-            TargetUserId = quit.TargetUserId
+            GroupId = quit.GroupId.ToString(CultureInfo.InvariantCulture),
+            NotificationId = quit.NotificationSeq.ToString(CultureInfo.InvariantCulture),
+            TargetUserId = quit.TargetUserId.ToString(CultureInfo.InvariantCulture)
         },
         _ => null
     };
@@ -287,54 +363,54 @@ public sealed class QFileApi : IQFileApi
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public async Task<string> UploadPrivateFileAsync(long userId, string fileUri, string fileName)
+    public async Task<string> UploadPrivateFileAsync(string userId, string fileUri, string fileName, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<UploadPrivateFileRequest, UploadPrivateFileResponse>(
-            new UploadPrivateFileRequest(userId, ResourceUriConverter.Convert(fileUri), fileName));
+            new UploadPrivateFileRequest(MilkyMapper.ParseId(userId, "userId"), ResourceUriConverter.Convert(fileUri), fileName), cancellationToken: cancellationToken);
         return response.FileId;
     }
 
-    public async Task<string> UploadGroupFileAsync(long groupId, string fileUri, string fileName, string parentFolderId = "/")
+    public async Task<string> UploadGroupFileAsync(string groupId, string fileUri, string fileName, string parentFolderId = "/", CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<UploadGroupFileRequest, UploadGroupFileResponse>(
-            new UploadGroupFileRequest(groupId, ResourceUriConverter.Convert(fileUri), fileName, parentFolderId));
+            new UploadGroupFileRequest(MilkyMapper.ParseId(groupId, "groupId"), ResourceUriConverter.Convert(fileUri), fileName, parentFolderId), cancellationToken: cancellationToken);
         return response.FileId;
     }
 
-    public async Task<string> GetPrivateFileDownloadUrlAsync(long userId, string fileId, string fileHash)
+    public async Task<string> GetPrivateFileDownloadUrlAsync(string userId, string fileId, string fileHash, CancellationToken cancellationToken = default)
         => await GetPrivateFileDownloadUrlAsync(userId, fileId, fileHash, false);
 
     public async Task<string> GetPrivateFileDownloadUrlAsync(
-        long userId, string fileId, string fileHash, bool isSelfSend)
+        string userId, string fileId, string fileHash, bool isSelfSend, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetPrivateFileDownloadUrlRequest, GetPrivateFileDownloadUrlResponse>(
-            new GetPrivateFileDownloadUrlRequest(userId, fileId, fileHash, isSelfSend));
+            new GetPrivateFileDownloadUrlRequest(MilkyMapper.ParseId(userId, "userId"), fileId, fileHash, isSelfSend), cancellationToken: cancellationToken);
         return response.DownloadUrl;
     }
 
-    public async Task<string> GetGroupFileDownloadUrlAsync(long groupId, string fileId)
+    public async Task<string> GetGroupFileDownloadUrlAsync(string groupId, string fileId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupFileDownloadUrlRequest, GetGroupFileDownloadUrlResponse>(
-            new GetGroupFileDownloadUrlRequest(groupId, fileId));
+            new GetGroupFileDownloadUrlRequest(MilkyMapper.ParseId(groupId, "groupId"), fileId), cancellationToken: cancellationToken);
         return response.DownloadUrl;
     }
 
     public async Task<(IReadOnlyList<QGroupFile> Files, IReadOnlyList<QGroupFolder> Folders)> GetGroupFilesAsync(
-        long groupId, string parentFolderId = "/")
+        string groupId, string parentFolderId = "/", CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupFilesRequest, GetGroupFilesResponse>(
-            new GetGroupFilesRequest(groupId, parentFolderId));
+            new GetGroupFilesRequest(MilkyMapper.ParseId(groupId, "groupId"), parentFolderId), cancellationToken: cancellationToken);
 
         var files = response.Files
             .Select(file => new QGroupFile
             {
-                GroupId = file.GroupId,
+                GroupId = file.GroupId.ToString(CultureInfo.InvariantCulture),
                 FileId = file.FileId,
                 FileName = file.FileName,
                 ParentFolderId = file.ParentFolderId,
                 FileSize = file.FileSize,
                 UploadedTime = DateTimeOffset.FromUnixTimeSeconds(file.UploadedTime),
-                UploaderId = file.UploaderId,
+                UploaderId = file.UploaderId.ToString(CultureInfo.InvariantCulture),
                 DownloadedTimes = file.DownloadedTimes,
                 ExpireTime = file.ExpireTime is { } expire and > 0
                     ? DateTimeOffset.FromUnixTimeSeconds(expire)
@@ -345,13 +421,13 @@ public sealed class QFileApi : IQFileApi
         var folders = response.Folders
             .Select(folder => new QGroupFolder
             {
-                GroupId = folder.GroupId,
+                GroupId = folder.GroupId.ToString(CultureInfo.InvariantCulture),
                 FolderId = folder.FolderId,
                 ParentFolderId = folder.ParentFolderId,
                 FolderName = folder.FolderName,
                 CreatedTime = DateTimeOffset.FromUnixTimeSeconds(folder.CreatedTime),
                 LastModifiedTime = DateTimeOffset.FromUnixTimeSeconds(folder.LastModifiedTime),
-                CreatorId = folder.CreatorId,
+                CreatorId = folder.CreatorId.ToString(CultureInfo.InvariantCulture),
                 FileCount = folder.FileCount
             })
             .ToArray();
@@ -359,30 +435,30 @@ public sealed class QFileApi : IQFileApi
         return (files, folders);
     }
 
-    public Task MoveGroupFileAsync(long groupId, string fileId, string targetFolderId, string parentFolderId = "/") =>
-        Milky.RequestAsync(new MoveGroupFileRequest(groupId, fileId, targetFolderId, parentFolderId));
+    public Task MoveGroupFileAsync(string groupId, string fileId, string targetFolderId, string parentFolderId = "/", CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new MoveGroupFileRequest(MilkyMapper.ParseId(groupId, "groupId"), fileId, targetFolderId, parentFolderId), cancellationToken: cancellationToken);
 
-    public Task RenameGroupFileAsync(long groupId, string fileId, string newFileName, string parentFolderId = "/") =>
-        Milky.RequestAsync(new RenameGroupFileRequest(groupId, fileId, newFileName, parentFolderId));
+    public Task RenameGroupFileAsync(string groupId, string fileId, string newFileName, string parentFolderId = "/", CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new RenameGroupFileRequest(MilkyMapper.ParseId(groupId, "groupId"), fileId, newFileName, parentFolderId), cancellationToken: cancellationToken);
 
-    public Task DeleteGroupFileAsync(long groupId, string fileId) =>
-        Milky.RequestAsync(new DeleteGroupFileRequest(groupId, fileId));
+    public Task DeleteGroupFileAsync(string groupId, string fileId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new DeleteGroupFileRequest(MilkyMapper.ParseId(groupId, "groupId"), fileId), cancellationToken: cancellationToken);
 
-    public async Task<string> CreateGroupFolderAsync(long groupId, string folderName)
+    public async Task<string> CreateGroupFolderAsync(string groupId, string folderName, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<CreateGroupFolderRequest, CreateGroupFolderResponse>(
-            new CreateGroupFolderRequest(groupId, folderName));
+            new CreateGroupFolderRequest(MilkyMapper.ParseId(groupId, "groupId"), folderName), cancellationToken: cancellationToken);
         return response.FolderId;
     }
 
-    public Task RenameGroupFolderAsync(long groupId, string folderId, string newFolderName) =>
-        Milky.RequestAsync(new RenameGroupFolderRequest(groupId, folderId, newFolderName));
+    public Task RenameGroupFolderAsync(string groupId, string folderId, string newFolderName, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new RenameGroupFolderRequest(MilkyMapper.ParseId(groupId, "groupId"), folderId, newFolderName), cancellationToken: cancellationToken);
 
-    public Task DeleteGroupFolderAsync(long groupId, string folderId) =>
-        Milky.RequestAsync(new DeleteGroupFolderRequest(groupId, folderId));
+    public Task DeleteGroupFolderAsync(string groupId, string folderId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new DeleteGroupFolderRequest(MilkyMapper.ParseId(groupId, "groupId"), folderId), cancellationToken: cancellationToken);
 
-    public Task PersistGroupFileAsync(long groupId, string fileId) =>
-        Milky.RequestAsync(new PersistGroupFileRequest(groupId, fileId));
+    public Task PersistGroupFileAsync(string groupId, string fileId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new PersistGroupFileRequest(MilkyMapper.ParseId(groupId, "groupId"), fileId), cancellationToken: cancellationToken);
 }
 
 /// <summary>IQSystemApi 的 Milky 实现。</summary>
@@ -390,10 +466,10 @@ public sealed class QSystemApi : IQSystemApi
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public async Task<QUserProfile> GetUserProfileAsync(long userId)
+    public async Task<QUserProfile> GetUserProfileAsync(string userId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetUserProfileRequest, GetUserProfileResponse>(
-            new GetUserProfileRequest(userId));
+            new GetUserProfileRequest(MilkyMapper.ParseId(userId, "userId")), cancellationToken: cancellationToken);
         return new QUserProfile
         {
             UserId = userId,
@@ -415,86 +491,58 @@ public sealed class QSystemApi : IQSystemApi
         };
     }
 
-    public async Task<IReadOnlyList<QFriend>> GetFriendListAsync(bool noCache = false)
+    public async Task<IReadOnlyList<QFriend>> GetFriendListAsync(bool noCache = false, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetFriendListRequest, GetFriendListResponse>(
-            new GetFriendListRequest(noCache));
+            new GetFriendListRequest(noCache), cancellationToken: cancellationToken);
         return response.Friends.Select(QModelMapper.ToQq).ToArray();
     }
 
-    public async Task<QFriend> GetFriendInfoAsync(long userId, bool noCache = false)
+    public async Task<QFriend> GetFriendInfoAsync(string userId, bool noCache = false, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetFriendInfoRequest, GetFriendInfoResponse>(
-            new GetFriendInfoRequest(userId, noCache));
+            new GetFriendInfoRequest(MilkyMapper.ParseId(userId, "userId"), noCache), cancellationToken: cancellationToken);
         return QModelMapper.ToQq(response.Friend);
     }
 
-    public async Task<IReadOnlyList<QGroup>> GetGroupListAsync(bool noCache = false)
+    public async Task<(IReadOnlyList<QFriend> Friends, IReadOnlyList<QGroup> Groups)> GetPeerPinsAsync(CancellationToken cancellationToken = default)
     {
-        var response = await Milky.RequestAsync<GetGroupListRequest, GetGroupListResponse>(
-            new GetGroupListRequest(noCache));
-        return response.Groups.Select(QModelMapper.ToQq).ToArray();
-    }
-
-    public async Task<QGroup> GetGroupInfoAsync(long groupId, bool noCache = false)
-    {
-        var response = await Milky.RequestAsync<GetGroupInfoRequest, GetGroupInfoResponse>(
-            new GetGroupInfoRequest(groupId, noCache));
-        return QModelMapper.ToQq(response.Group);
-    }
-
-    public async Task<IReadOnlyList<QGroupMember>> GetGroupMemberListAsync(long groupId, bool noCache = false)
-    {
-        var response = await Milky.RequestAsync<GetGroupMemberListRequest, GetGroupMemberListResponse>(
-            new GetGroupMemberListRequest(groupId, noCache));
-        return response.Members.Select(QModelMapper.ToQq).ToArray();
-    }
-
-    public async Task<QGroupMember> GetGroupMemberInfoAsync(long groupId, long userId, bool noCache = false)
-    {
-        var response = await Milky.RequestAsync<GetGroupMemberInfoRequest, GetGroupMemberInfoResponse>(
-            new GetGroupMemberInfoRequest(groupId, userId, noCache));
-        return QModelMapper.ToQq(response.Member);
-    }
-
-    public async Task<(IReadOnlyList<QFriend> Friends, IReadOnlyList<QGroup> Groups)> GetPeerPinsAsync()
-    {
-        var response = await Milky.RequestAsync<GetPeerPinsRequest, GetPeerPinsResponse>(new GetPeerPinsRequest());
+        var response = await Milky.RequestAsync<GetPeerPinsRequest, GetPeerPinsResponse>(new GetPeerPinsRequest(), cancellationToken: cancellationToken);
         return (
             response.Friends.Select(QModelMapper.ToQq).ToArray(),
             response.Groups.Select(QModelMapper.ToQq).ToArray());
     }
 
-    public Task SetAvatarAsync(string imageUri) =>
-        Milky.RequestAsync(new SetAvatarRequest(ResourceUriConverter.Convert(imageUri)));
+    public Task SetAvatarAsync(string imageUri, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetAvatarRequest(ResourceUriConverter.Convert(imageUri)), cancellationToken: cancellationToken);
 
-    public Task SetNicknameAsync(string nickname) =>
-        Milky.RequestAsync(new SetNicknameRequest(nickname));
+    public Task SetNicknameAsync(string nickname, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetNicknameRequest(nickname), cancellationToken: cancellationToken);
 
-    public Task SetBioAsync(string bio) =>
-        Milky.RequestAsync(new SetBioRequest(bio));
+    public Task SetBioAsync(string bio, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetBioRequest(bio), cancellationToken: cancellationToken);
 
-    public async Task<string> GetCookiesAsync(string domain)
+    public async Task<string> GetCookiesAsync(string domain, CancellationToken cancellationToken = default)
     {
-        var response = await Milky.RequestAsync<GetCookiesRequest, GetCookiesResponse>(new GetCookiesRequest(domain));
+        var response = await Milky.RequestAsync<GetCookiesRequest, GetCookiesResponse>(new GetCookiesRequest(domain), cancellationToken: cancellationToken);
         return response.Cookies;
     }
 
-    public async Task<string> GetCsrfTokenAsync()
+    public async Task<string> GetCsrfTokenAsync(CancellationToken cancellationToken = default)
     {
-        var response = await Milky.RequestAsync<GetCsrfTokenRequest, GetCsrfTokenResponse>(new GetCsrfTokenRequest());
+        var response = await Milky.RequestAsync<GetCsrfTokenRequest, GetCsrfTokenResponse>(new GetCsrfTokenRequest(), cancellationToken: cancellationToken);
         return response.CsrfToken;
     }
 
-    async Task<QLoginInfo> IQSystemApi.GetLoginInfoAsync()
+    async Task<QLoginInfo> IQSystemApi.GetLoginInfoAsync(CancellationToken cancellationToken)
     {
-        var response = await Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest());
-        return new QLoginInfo(response.Uin, response.Nickname);
+        var response = await Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest(), cancellationToken: cancellationToken);
+        return new QLoginInfo(response.Uin.ToString(CultureInfo.InvariantCulture), response.Nickname);
     }
 
-    async Task<QImplInfo> IQSystemApi.GetImplInfoAsync()
+    async Task<QImplInfo> IQSystemApi.GetImplInfoAsync(CancellationToken cancellationToken)
     {
-        var response = await Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest());
+        var response = await Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest(), cancellationToken: cancellationToken);
         return new QImplInfo
         {
             ImplName = response.ImplName,
@@ -505,14 +553,14 @@ public sealed class QSystemApi : IQSystemApi
         };
     }
 
-    async Task<IReadOnlyList<string>> IQSystemApi.GetCustomFaceUrlListAsync()
+    async Task<IReadOnlyList<string>> IQSystemApi.GetCustomFaceUrlListAsync(CancellationToken cancellationToken)
     {
         var response = await Milky.RequestAsync<GetCustomFaceUrlListRequest, GetCustomFaceUrlListResponse>(
-            new GetCustomFaceUrlListRequest());
+            new GetCustomFaceUrlListRequest(), cancellationToken: cancellationToken);
         return response.Urls;
     }
 
-    public Task SetPeerPinAsync(QMessageScene scene, long peerId, bool isPinned = true) =>
+    public Task SetPeerPinAsync(QMessageScene scene, string peerId, bool isPinned = true, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new SetPeerPinRequest(
             scene switch
             {
@@ -520,8 +568,8 @@ public sealed class QSystemApi : IQSystemApi
                 QMessageScene.Temp => SetPeerPinRequestMessageScene.Temp,
                 _ => SetPeerPinRequestMessageScene.Friend
             },
-            peerId,
-            isPinned));
+            MilkyMapper.ParseId(peerId, "peerId"),
+            isPinned), cancellationToken: cancellationToken);
 }
 
 /// <summary>IQMessageApi 的 Milky 实现。</summary>
@@ -529,34 +577,34 @@ public sealed class QMessageApi : IQMessageApi
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public async Task<long> SendMessageAsync(
+    public async Task<string> SendMessageAsync(
         QMessageScene scene,
-        long peerId,
-        IReadOnlyList<QOutgoingSegment> segments)
-        => (await SendMessageDetailedAsync(scene, peerId, segments)).MessageSeq;
+        string peerId,
+        IReadOnlyList<QOutgoingSegment> segments, CancellationToken cancellationToken = default)
+        => (await SendMessageDetailedAsync(scene, peerId, segments, cancellationToken)).MessageId;
 
     public async Task<QSentMessage> SendMessageDetailedAsync(
         QMessageScene scene,
-        long peerId,
-        IReadOnlyList<QOutgoingSegment> segments)
+        string peerId,
+        IReadOnlyList<QOutgoingSegment> segments, CancellationToken cancellationToken = default)
     {
         var milkySegments = ResourceUriConverter.Convert(segments.Select(QModelMapper.ToMilky).ToArray());
 
         if (scene == QMessageScene.Group)
         {
             var response = await Milky.RequestAsync<SendGroupMessageRequest, SendGroupMessageResponse>(
-                new SendGroupMessageRequest(peerId, milkySegments));
-            return new QSentMessage(response.MessageSeq, DateTimeOffset.FromUnixTimeSeconds(response.Time));
+                new SendGroupMessageRequest(MilkyMapper.ParseId(peerId, "peerId"), milkySegments), cancellationToken: cancellationToken);
+            return new QSentMessage(response.MessageSeq.ToString(CultureInfo.InvariantCulture), DateTimeOffset.FromUnixTimeSeconds(response.Time));
         }
 
         var privateResponse = await Milky.RequestAsync<SendPrivateMessageRequest, SendPrivateMessageResponse>(
-            new SendPrivateMessageRequest(peerId, milkySegments));
+            new SendPrivateMessageRequest(MilkyMapper.ParseId(peerId, "peerId"), milkySegments), cancellationToken: cancellationToken);
         return new QSentMessage(
-            privateResponse.MessageSeq,
+            privateResponse.MessageSeq.ToString(CultureInfo.InvariantCulture),
             DateTimeOffset.FromUnixTimeSeconds(privateResponse.Time));
     }
 
-    public async Task<QIncomingMessage?> GetMessageAsync(QMessageScene scene, long peerId, long messageSeq)
+    public async Task<QIncomingMessage?> GetMessageAsync(QMessageScene scene, string peerId, string messageId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetMessageRequest, GetMessageResponse>(new GetMessageRequest(
             scene switch
@@ -565,13 +613,13 @@ public sealed class QMessageApi : IQMessageApi
                 QMessageScene.Temp => GetMessageRequestMessageScene.Temp,
                 _ => GetMessageRequestMessageScene.Friend
             },
-            peerId,
-            messageSeq));
+            MilkyMapper.ParseId(peerId, "peerId"),
+            MilkyMapper.ParseId(messageId, "messageId")), cancellationToken: cancellationToken);
         return QModelMapper.ToQq(response.Message);
     }
 
-    public async Task<(IReadOnlyList<QIncomingMessage> Messages, long? NextMessageSeq)> GetHistoryMessagesAsync(
-        QMessageScene scene, long peerId, long? startMessageSeq = null, int limit = 20)
+    public async Task<(IReadOnlyList<QIncomingMessage> Messages, string? NextCursor)> GetHistoryMessagesAsync(
+        QMessageScene scene, string peerId, string? cursor = null, int limit = 20, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetHistoryMessagesRequest, GetHistoryMessagesResponse>(
             new GetHistoryMessagesRequest(
@@ -581,9 +629,9 @@ public sealed class QMessageApi : IQMessageApi
                     QMessageScene.Temp => GetHistoryMessagesRequestMessageScene.Temp,
                     _ => GetHistoryMessagesRequestMessageScene.Friend
                 },
-                peerId,
-                startMessageSeq,
-                limit));
+                MilkyMapper.ParseId(peerId, "peerId"),
+                cursor is null ? null : MilkyMapper.ParseId(cursor, "Cursor"),
+                limit), cancellationToken: cancellationToken);
 
         var messages = response.Messages
             .Select(QModelMapper.ToQq)
@@ -591,29 +639,29 @@ public sealed class QMessageApi : IQMessageApi
             .Cast<QIncomingMessage>()
             .ToArray();
 
-        return (messages, response.NextMessageSeq);
+        return (messages, response.NextMessageSeq?.ToString(CultureInfo.InvariantCulture));
     }
 
-    public Task RecallMessageAsync(QMessageScene scene, long peerId, long messageSeq) =>
+    public Task RecallMessageAsync(QMessageScene scene, string peerId, string messageId, CancellationToken cancellationToken = default) =>
         scene == QMessageScene.Group
-            ? Milky.RequestAsync(new RecallGroupMessageRequest(peerId, messageSeq))
-            : Milky.RequestAsync(new RecallPrivateMessageRequest(peerId, messageSeq));
+            ? Milky.RequestAsync(new RecallGroupMessageRequest(MilkyMapper.ParseId(peerId, "peerId"), MilkyMapper.ParseId(messageId, "messageId")), cancellationToken: cancellationToken)
+            : Milky.RequestAsync(new RecallPrivateMessageRequest(MilkyMapper.ParseId(peerId, "peerId"), MilkyMapper.ParseId(messageId, "messageId")), cancellationToken: cancellationToken);
 
-    public async Task<string> GetResourceTempUrlAsync(string resourceId)
+    public async Task<string> GetResourceTempUrlAsync(string resourceId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetResourceTempUrlRequest, GetResourceTempUrlResponse>(
-            new GetResourceTempUrlRequest(resourceId));
+            new GetResourceTempUrlRequest(resourceId), cancellationToken: cancellationToken);
         return response.Url;
     }
 
-    public async Task<IReadOnlyList<QForwardedIncomingMessage>> GetForwardedMessagesAsync(string forwardId)
+    public async Task<IReadOnlyList<QForwardedIncomingMessage>> GetForwardedMessagesAsync(string forwardId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetForwardedMessagesRequest, GetForwardedMessagesResponse>(
-            new GetForwardedMessagesRequest(forwardId));
+            new GetForwardedMessagesRequest(forwardId), cancellationToken: cancellationToken);
         return response.Messages
             .Select(message => new QForwardedIncomingMessage
             {
-                MessageSeq = message.MessageSeq,
+                MessageId = message.MessageSeq.ToString(CultureInfo.InvariantCulture),
                 SenderName = message.SenderName,
                 AvatarUrl = message.AvatarUrl,
                 Time = DateTimeOffset.FromUnixTimeSeconds(message.Time),
@@ -622,7 +670,7 @@ public sealed class QMessageApi : IQMessageApi
             .ToArray();
     }
 
-    public Task MarkAsReadAsync(QMessageScene scene, long peerId, long messageSeq) =>
+    public Task MarkAsReadAsync(QMessageScene scene, string peerId, string messageId, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new MarkMessageAsReadRequest(
             scene switch
             {
@@ -630,6 +678,6 @@ public sealed class QMessageApi : IQMessageApi
                 QMessageScene.Temp => MarkMessageAsReadRequestMessageScene.Temp,
                 _ => MarkMessageAsReadRequestMessageScene.Friend
             },
-            peerId,
-            messageSeq));
+            MilkyMapper.ParseId(peerId, "peerId"),
+            MilkyMapper.ParseId(messageId, "messageId")), cancellationToken: cancellationToken);
 }

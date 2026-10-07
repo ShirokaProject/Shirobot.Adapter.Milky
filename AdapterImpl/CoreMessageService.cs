@@ -6,18 +6,25 @@ using Sdk = ShiroBot.SDK.Models;
 namespace ShiroBot.Adapter.Milky.AdapterImpl;
 
 /// <summary>平台无关消息服务的 Milky 实现。</summary>
-public class CoreMessageService : IMessageService
+public class CoreMessageService(MilkyClient? client = null) : IMessageService
 {
-    private static MilkyClient Milky => MilkyClientManager.Instance;
+    private MilkyClient Milky => client ?? MilkyClientManager.Instance;
 
-    public async Task<SentMessage> SendMessageAsync(Sdk.Channel channel, IReadOnlyList<MessageSegment> segments)
+    public MessageCapabilities GetMessageCapabilities(Sdk.Channel channel) => new()
+    {
+        NativeFeatures = MessageFeatures.Text | MessageFeatures.Mention | MessageFeatures.MentionAll | MessageFeatures.Emoji
+            | MessageFeatures.Quote | MessageFeatures.Image | MessageFeatures.Audio | MessageFeatures.Video | MessageFeatures.Raw,
+        CanMixMarkdown = false
+    };
+
+    public async Task<SentMessage> SendMessageAsync(Sdk.Channel channel, IReadOnlyList<MessageSegment> segments, CancellationToken cancellationToken = default)
     {
         var outgoing = ResourceUriConverter.Convert(MilkyMapper.ToOutgoingSegments(segments));
 
         if (channel.Type == ChannelType.Group)
         {
             var response = await Milky.RequestAsync<SendGroupMessageRequest, SendGroupMessageResponse>(
-                new SendGroupMessageRequest(MilkyMapper.ParseId(channel.Id, "Channel.Id"), outgoing));
+                new SendGroupMessageRequest(MilkyMapper.ParseId(channel.Id, "Channel.Id"), outgoing), cancellationToken: cancellationToken);
             return new SentMessage(response.MessageSeq.ToString())
             {
                 Timestamp = DateTimeOffset.FromUnixTimeSeconds(response.Time)
@@ -25,29 +32,29 @@ public class CoreMessageService : IMessageService
         }
 
         var privateResponse = await Milky.RequestAsync<SendPrivateMessageRequest, SendPrivateMessageResponse>(
-            new SendPrivateMessageRequest(MilkyMapper.ParseId(channel.Id, "Channel.Id"), outgoing));
+            new SendPrivateMessageRequest(MilkyMapper.ParseId(channel.Id, "Channel.Id"), outgoing), cancellationToken: cancellationToken);
         return new SentMessage(privateResponse.MessageSeq.ToString())
         {
             Timestamp = DateTimeOffset.FromUnixTimeSeconds(privateResponse.Time)
         };
     }
 
-    public Task DeleteMessageAsync(Sdk.Channel channel, string messageId)
+    public Task DeleteMessageAsync(Sdk.Channel channel, string messageId, CancellationToken cancellationToken = default)
     {
         var seq = MilkyMapper.ParseId(messageId, "messageId");
         var peerId = MilkyMapper.ParseId(channel.Id, "Channel.Id");
 
         return channel.Type == ChannelType.Group
-            ? Milky.RequestAsync(new RecallGroupMessageRequest(peerId, seq))
-            : Milky.RequestAsync(new RecallPrivateMessageRequest(peerId, seq));
+            ? Milky.RequestAsync(new RecallGroupMessageRequest(peerId, seq), cancellationToken: cancellationToken)
+            : Milky.RequestAsync(new RecallPrivateMessageRequest(peerId, seq), cancellationToken: cancellationToken);
     }
 
-    public async Task<MessageEvent?> GetMessageAsync(Sdk.Channel channel, string messageId)
+    public async Task<MessageEvent?> GetMessageAsync(Sdk.Channel channel, string messageId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetMessageRequest, GetMessageResponse>(new GetMessageRequest(
             ToMessageScene(channel),
             MilkyMapper.ParseId(channel.Id, "Channel.Id"),
-            MilkyMapper.ParseId(messageId, "messageId")));
+            MilkyMapper.ParseId(messageId, "messageId")), cancellationToken: cancellationToken);
 
         return MilkyMapper.ToMessageEvent(response.Message);
     }
@@ -55,7 +62,7 @@ public class CoreMessageService : IMessageService
     public async Task<IReadOnlyList<MessageEvent>> GetHistoryMessagesAsync(
         Sdk.Channel channel,
         string? beforeMessageId = null,
-        int limit = 20)
+        int limit = 20, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetHistoryMessagesRequest, GetHistoryMessagesResponse>(
             new GetHistoryMessagesRequest(
@@ -66,7 +73,7 @@ public class CoreMessageService : IMessageService
                         : GetHistoryMessagesRequestMessageScene.Friend,
                 MilkyMapper.ParseId(channel.Id, "Channel.Id"),
                 beforeMessageId is null ? null : MilkyMapper.ParseId(beforeMessageId, "beforeMessageId"),
-                limit));
+                limit), cancellationToken: cancellationToken);
 
         return response.Messages
             .Select(MilkyMapper.ToMessageEvent)
@@ -75,10 +82,10 @@ public class CoreMessageService : IMessageService
             .ToArray();
     }
 
-    public async Task<string> GetResourceUrlAsync(string resourceId)
+    public async Task<string> GetResourceUrlAsync(string resourceId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetResourceTempUrlRequest, GetResourceTempUrlResponse>(
-            new GetResourceTempUrlRequest(resourceId));
+            new GetResourceTempUrlRequest(resourceId), cancellationToken: cancellationToken);
         return response.Url;
     }
 

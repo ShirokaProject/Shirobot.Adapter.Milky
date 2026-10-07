@@ -10,52 +10,52 @@ public class CoreChannelService : IChannelService
 {
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
-    public async Task<IReadOnlyList<Sdk.Channel>> GetChannelsAsync()
+    public async Task<IReadOnlyList<Sdk.Channel>> GetChannelsAsync(CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupListRequest, GetGroupListResponse>(
-            new GetGroupListRequest(false));
+            new GetGroupListRequest(false), cancellationToken: cancellationToken);
         return response.Groups.Select(MilkyMapper.ToChannel).ToArray();
     }
 
-    public async Task<Sdk.Channel?> GetChannelAsync(string channelId)
+    public async Task<Sdk.Channel?> GetChannelAsync(string channelId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupInfoRequest, GetGroupInfoResponse>(
-            new GetGroupInfoRequest(MilkyMapper.ParseId(channelId, "channelId"), false));
+            new GetGroupInfoRequest(MilkyMapper.ParseId(channelId, "channelId"), false), cancellationToken: cancellationToken);
         return MilkyMapper.ToChannel(response.Group);
     }
 
-    public async Task<IReadOnlyList<Member>> GetMembersAsync(string channelId)
+    public async Task<IReadOnlyList<Member>> GetMembersAsync(string channelId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupMemberListRequest, GetGroupMemberListResponse>(
-            new GetGroupMemberListRequest(MilkyMapper.ParseId(channelId, "channelId"), false));
+            new GetGroupMemberListRequest(MilkyMapper.ParseId(channelId, "channelId"), false), cancellationToken: cancellationToken);
         return response.Members.Select(MilkyMapper.ToMember).ToArray();
     }
 
-    public async Task<Member?> GetMemberAsync(string channelId, string userId)
+    public async Task<Member?> GetMemberAsync(string channelId, string userId, CancellationToken cancellationToken = default)
     {
         var response = await Milky.RequestAsync<GetGroupMemberInfoRequest, GetGroupMemberInfoResponse>(
             new GetGroupMemberInfoRequest(
                 MilkyMapper.ParseId(channelId, "channelId"),
                 MilkyMapper.ParseId(userId, "userId"),
-                false));
+                false), cancellationToken: cancellationToken);
         return MilkyMapper.ToMember(response.Member);
     }
 
-    public Task SetChannelNameAsync(string channelId, string name) =>
-        Milky.RequestAsync(new SetGroupNameRequest(MilkyMapper.ParseId(channelId, "channelId"), name));
+    public Task SetChannelNameAsync(string channelId, string name, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new SetGroupNameRequest(MilkyMapper.ParseId(channelId, "channelId"), name), cancellationToken: cancellationToken);
 
-    public Task KickMemberAsync(string channelId, string userId) =>
+    public Task KickMemberAsync(string channelId, string userId, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new KickGroupMemberRequest(
             MilkyMapper.ParseId(channelId, "channelId"),
             MilkyMapper.ParseId(userId, "userId"),
-            false));
+            false), cancellationToken: cancellationToken);
 
-    public Task MuteMemberAsync(string channelId, string userId, TimeSpan duration) =>
+    public Task MuteMemberAsync(string channelId, string userId, TimeSpan duration, CancellationToken cancellationToken = default) =>
         Milky.RequestAsync(new SetGroupMemberMuteRequest(
             MilkyMapper.ParseId(channelId, "channelId"),
             MilkyMapper.ParseId(userId, "userId"),
-            (int)duration.TotalSeconds));
+            (int)duration.TotalSeconds), cancellationToken: cancellationToken);
 
-    public Task LeaveChannelAsync(string channelId) =>
-        Milky.RequestAsync(new QuitGroupRequest(MilkyMapper.ParseId(channelId, "channelId")));
+    public Task LeaveChannelAsync(string channelId, CancellationToken cancellationToken = default) =>
+        Milky.RequestAsync(new QuitGroupRequest(MilkyMapper.ParseId(channelId, "channelId")), cancellationToken: cancellationToken);
 }

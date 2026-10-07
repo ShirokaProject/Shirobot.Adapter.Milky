@@ -31,3 +31,14 @@ Windows 上，普通用户只能监听 `localhost`（因此在 Windows 上会默
 ```powershell
 netsh http add urlacl url=http://+:端口/ user=Everyone
 ```
+
+## QQ Model ABI 1.0
+
+插件侧 ID 统一为字符串，Milky 的数值转换只发生在协议边界。群信息和成员查询统一在 `IQGroupApi`，
+入群申请使用 `QGroupJoinRequest`，审批直接传入该对象。引用旧 QQ Model 的插件需重新编译。
+
+构建需要宿主源码，默认路径为 `../../ShiroBot`；其他布局可指定：
+
+```sh
+dotnet build -c Release -p:ShiroBotSourceRoot=/path/to/ShiroBot -p:CopyAdapterToHost=false
+```

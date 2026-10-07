@@ -19,6 +19,7 @@ public class MilkyClient(HttpClient httpClient) : IDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         using var body = JsonContent.Create(request, options: JsonOptions);
         using var response = await httpClient.PostAsync($"api/{ToApiName(typeof(TRequest).Name)}", body, cancellationToken);
@@ -233,7 +234,7 @@ internal sealed class MilkyResult
         if (RetCode is not null and not 0 ||
             !string.IsNullOrWhiteSpace(Status) && !string.Equals(Status, "ok", StringComparison.OrdinalIgnoreCase))
         {
-            throw new HttpRequestException(
+            throw new MilkyApiException(
                 $"Milky API business error: status={Status ?? "unknown"}, retcode={RetCode?.ToString() ?? "unknown"}, message={Message ?? "unknown"}");
         }
 
@@ -251,3 +252,6 @@ internal sealed class MilkyResult
         return result ?? throw new JsonException($"Cannot deserialize wrapped data as {typeof(T).FullName}.");
     }
 }
+
+/// <summary>协议端明确返回的业务拒绝，与连接中断等不确定错误区分。</summary>
+public sealed class MilkyApiException(string message) : HttpRequestException(message);
