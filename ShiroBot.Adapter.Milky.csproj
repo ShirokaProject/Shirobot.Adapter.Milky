@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-    <Version>2.2.2</Version>
+    <Version>2.2.3</Version>
         <TargetFramework>net10.0</TargetFramework>
         <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == ''">$(MSBuildProjectDirectory)/../../ShiroBot</ShiroBotSourceRoot>
         <ImplicitUsings>enable</ImplicitUsings>

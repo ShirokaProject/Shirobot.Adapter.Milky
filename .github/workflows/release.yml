@@ -52,7 +52,7 @@ jobs:
         run: >-
           dotnet publish "$PROJECT_FILE" --configuration Release
           --output "$PUBLISH_DIR"
-          -p:CopyAdapterToHost=false
+          -p:CopyAdapterToHost=false -p:ShiroBotPluginPackagingEnabled=false
 
       - name: Package adapter
         shell: bash
@@ -64,9 +64,16 @@ jobs:
             ls -la "$PUBLISH_DIR"
             exit 1
           fi
+          MODEL_DLL="$PUBLISH_DIR/ShiroBot.Adapter.Milky.Model.dll"
+          test -f "$MODEL_DLL"
           mkdir -p release/stage
-          cp "$ADAPTER_DLL" release/stage/
-          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ShiroBot.Adapter.Milky.dll)
+          cp "$ADAPTER_DLL" "$MODEL_DLL" release/stage/
+          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ShiroBot.Adapter.Milky.dll ShiroBot.Adapter.Milky.Model.dll)
+
+      - name: Verify packaged adapter in isolation
+        run: >-
+          dotnet run --project tests/ShiroBot.MilkyPackageProbe --configuration Release
+          -- release/ShiroBot.Adapter.Milky.zip
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
