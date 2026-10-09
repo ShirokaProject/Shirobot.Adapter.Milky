@@ -15,7 +15,7 @@ namespace ShiroBot.Adapter.Milky;
 
 [BotAdapter("milky",
     Name = "MilkyAdapter",
-    Version = "2.2.3",
+    Version = "2.2.4",
     Description = "Milky (QQ NT) adapter for ShiroBot",
     Author = "ShirokaProject",
     GithubRepo = "https://github.com/ShirokaProject/Shirobot.Adapter.Milky",

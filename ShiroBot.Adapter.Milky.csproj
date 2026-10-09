@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-    <Version>2.2.3</Version>
+        <Version>2.2.4</Version>
         <TargetFramework>net10.0</TargetFramework>
-        <ShiroBotSourceRoot Condition="'$(ShiroBotSourceRoot)' == ''">$(MSBuildProjectDirectory)/../../ShiroBot</ShiroBotSourceRoot>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -14,8 +13,6 @@
         <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
         <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
     </PropertyGroup>
-
-    <Import Project="$(ShiroBotSourceRoot)/SDK/buildTransitive/ShiroBot.SDK.props" />
 
     <ItemGroup>
         <!-- 子项目目录不参与适配器本体编译 -->
@@ -30,10 +27,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),随适配器一起打包 -->
+        <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),发布时由 SDK ILRepack 合并到适配器 DLL -->
         <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
-        <ProjectReference Include="$(ShiroBotSourceRoot)/SDK/ShiroBot.SDK.csproj" Private="false" />
-        <ProjectReference Include="$(ShiroBotSourceRoot)/Models/QQ/ShiroBot.Model.QQ.csproj" Private="false" />
+        <PackageReference Include="ShiroBot.SDK" Version="0.9.9" />
     </ItemGroup>
 
     <Target Name="CopyAdapterToHost"
@@ -51,6 +47,4 @@
               DestinationFiles="@(AdapterDebugOutput->'$(HostAdapterDir)%(RecursiveDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true" />
     </Target>
-
-    <Import Project="$(ShiroBotSourceRoot)/SDK/buildTransitive/ShiroBot.SDK.targets" />
 </Project>

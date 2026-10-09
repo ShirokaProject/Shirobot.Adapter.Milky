@@ -25,13 +25,14 @@ try
         var type = types.Single(type => typeof(IBotAdapter).IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface);
         var adapter = (IBotAdapter)Activator.CreateInstance(type)!;
         if (adapter.Platform != "qq") throw new InvalidOperationException("Unexpected adapter platform.");
-        if (context.LoadFromAssemblyName(new AssemblyName("ShiroBot.Adapter.Milky.Model")).GetTypes().Length == 0)
-            throw new InvalidOperationException("Empty private protocol model.");
+        if (assembly.GetReferencedAssemblies().Any(reference => reference.Name == "ShiroBot.Adapter.Milky.Model") ||
+            !types.Any(type => type.Namespace?.StartsWith("ShiroBot.Adapter.Milky.Model.", StringComparison.Ordinal) == true))
+            throw new InvalidOperationException("Private protocol models must be merged into the adapter DLL.");
         using var archive = ZipFile.OpenRead(Path.GetFullPath(args[0]));
         var names = archive.Entries.Select(entry => entry.FullName).Order().ToArray();
-        if (!names.SequenceEqual(new[] { "ShiroBot.Adapter.Milky.Model.dll", "ShiroBot.Adapter.Milky.dll" }.Order()))
-            throw new InvalidOperationException("ZIP must contain exactly the adapter and private model DLLs, without symbols or host contracts.");
-        Console.WriteLine("Packaged Milky adapter and private model loaded successfully in isolation.");
+        if (!names.SequenceEqual(new[] { "ShiroBot.Adapter.Milky.dll" }))
+            throw new InvalidOperationException("ZIP must contain only the merged adapter DLL, without private dependencies, symbols or host contracts.");
+        Console.WriteLine("Packaged single-DLL Milky adapter loaded successfully with merged protocol models.");
     }
     finally { context.Unload(); }
 }

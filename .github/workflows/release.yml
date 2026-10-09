@@ -52,7 +52,7 @@ jobs:
         run: >-
           dotnet publish "$PROJECT_FILE" --configuration Release
           --output "$PUBLISH_DIR"
-          -p:CopyAdapterToHost=false -p:ShiroBotPluginPackagingEnabled=false
+          -p:CopyAdapterToHost=false -p:ShiroBotPluginPackagingEnabled=true
 
       - name: Package adapter
         shell: bash
@@ -64,11 +64,10 @@ jobs:
             ls -la "$PUBLISH_DIR"
             exit 1
           fi
-          MODEL_DLL="$PUBLISH_DIR/ShiroBot.Adapter.Milky.Model.dll"
-          test -f "$MODEL_DLL"
+          test ! -f "$PUBLISH_DIR/ShiroBot.Adapter.Milky.Model.dll"
           mkdir -p release/stage
-          cp "$ADAPTER_DLL" "$MODEL_DLL" release/stage/
-          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ShiroBot.Adapter.Milky.dll ShiroBot.Adapter.Milky.Model.dll)
+          cp "$ADAPTER_DLL" release/stage/
+          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ShiroBot.Adapter.Milky.dll)
 
       - name: Verify packaged adapter in isolation
         run: >-
