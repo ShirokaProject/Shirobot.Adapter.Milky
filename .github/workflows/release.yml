@@ -66,8 +66,7 @@ jobs:
           fi
           mkdir -p release/stage
           cp "$ADAPTER_DLL" release/stage/
-          [ -f "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" ] && cp "$PUBLISH_DIR/ShiroBot.Adapter.Milky.pdb" release/stage/ || true
-          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ./*)
+          (cd release/stage && zip -j ../ShiroBot.Adapter.Milky.zip ShiroBot.Adapter.Milky.dll)
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
