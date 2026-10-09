@@ -44,3 +44,9 @@ netsh http add urlacl url=http://+:端口/ user=Everyone
 ```sh
 dotnet build -c Release -p:ShiroBotSourceRoot=/path/to/ShiroBot -p:CopyAdapterToHost=false
 ```
+
+## 通用文件服务
+
+通过 `GetAdapterExtension<IFileService>()` 探测上传能力。Milky 同时保留 `IQFileApi`；普通文件发送使用单独的 `FileSegment`，支持群聊及私聊。上传即发布文件，但不返回消息 ID；发送结果用 `UploadedFile.FileId` 表示文件 ID，不能当作消息 ID。暂不支持文本/引用与文件混合发送。
+
+此次版本使用 SDK 0.9.9 / SDK ABI 1.1.0.0，要求宿主 0.9.9 或更高版本；QQ Model ABI 仍为 1.0.0.0。

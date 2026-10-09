@@ -13,12 +13,28 @@ public class CoreMessageService(MilkyClient? client = null) : IMessageService
     public MessageCapabilities GetMessageCapabilities(Sdk.Channel channel) => new()
     {
         NativeFeatures = MessageFeatures.Text | MessageFeatures.Mention | MessageFeatures.MentionAll | MessageFeatures.Emoji
-            | MessageFeatures.Quote | MessageFeatures.Image | MessageFeatures.Audio | MessageFeatures.Video | MessageFeatures.Raw,
+            | MessageFeatures.Quote | MessageFeatures.Image | MessageFeatures.Audio | MessageFeatures.Video | MessageFeatures.Raw
+            | (channel.Type is ChannelType.Group or ChannelType.Direct ? MessageFeatures.File : MessageFeatures.None),
         CanMixMarkdown = false
     };
 
     public async Task<SentMessage> SendMessageAsync(Sdk.Channel channel, IReadOnlyList<MessageSegment> segments, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(segments);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (segments.OfType<FileSegment>().Any())
+        {
+            if (segments.Count != 1 || segments[0] is not FileSegment file)
+                throw new NotSupportedException("Milky file sends require a single FileSegment; text and files are not automatically split.");
+            var uploaded = await new QFileApi(Milky).UploadAsync(channel, new FileUploadRequest
+            {
+                Uri = file.Uri,
+                FileName = file.FileName ?? (Uri.TryCreate(file.Uri, UriKind.Absolute, out var uri) && uri.IsFile
+                    ? Path.GetFileName(uri.LocalPath) : "file.bin")
+            }, cancellationToken).ConfigureAwait(false);
+            return new SentMessage(string.Empty) { UploadedFile = uploaded };
+        }
         var outgoing = ResourceUriConverter.Convert(MilkyMapper.ToOutgoingSegments(segments));
 
         if (channel.Type == ChannelType.Group)

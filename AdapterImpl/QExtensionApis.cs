@@ -359,9 +359,33 @@ public sealed class QGroupApi(MilkyClient? client = null) : IQGroupApi, IMessage
 }
 
 /// <summary>IQFileApi 的 Milky 实现。</summary>
-public sealed class QFileApi : IQFileApi
+public sealed class QFileApi(MilkyClient? client = null) : IQFileApi, ShiroBot.SDK.Adapter.IFileService
 {
-    private static MilkyClient Milky => MilkyClientManager.Instance;
+    public QFileApi() : this(null) { }
+
+    private MilkyClient Milky => client ?? MilkyClientManager.Instance;
+
+    public ShiroBot.SDK.Models.FileCapabilities GetFileCapabilities(ShiroBot.SDK.Models.Channel channel) => new()
+    {
+        CanUpload = channel.Type is ShiroBot.SDK.Models.ChannelType.Group or ShiroBot.SDK.Models.ChannelType.Direct,
+        UploadPublishes = true
+    };
+
+    public async Task<ShiroBot.SDK.Models.FileUploadResult> UploadAsync(ShiroBot.SDK.Models.Channel channel,
+        ShiroBot.SDK.Models.FileUploadRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Uri);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.FileName);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!GetFileCapabilities(channel).CanUpload) throw new NotSupportedException("Milky file uploads support group and direct channels only.");
+        var uri = Path.IsPathFullyQualified(request.Uri) ? new Uri(request.Uri).AbsoluteUri : request.Uri;
+        var id = channel.Type == ShiroBot.SDK.Models.ChannelType.Group
+            ? await UploadGroupFileAsync(channel.Id, uri, request.FileName, cancellationToken: cancellationToken).ConfigureAwait(false)
+            : await UploadPrivateFileAsync(channel.Id, uri, request.FileName, cancellationToken).ConfigureAwait(false);
+        return new() { FileId = id, IsPublished = true };
+    }
 
     public async Task<string> UploadPrivateFileAsync(string userId, string fileUri, string fileName, CancellationToken cancellationToken = default)
     {

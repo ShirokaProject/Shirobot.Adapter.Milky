@@ -9,13 +9,13 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 
-[assembly: ShiroBotApiCompatibility("0.9.1", "0.9.1")]
+[assembly: ShiroBotApiCompatibility("0.9.2", "0.9.2")]
 
 namespace ShiroBot.Adapter.Milky;
 
 [BotAdapter("milky",
     Name = "MilkyAdapter",
-    Version = "2.2.1",
+    Version = "2.2.2",
     Description = "Milky (QQ NT) adapter for ShiroBot",
     Author = "ShirokaProject",
     GithubRepo = "https://github.com/ShirokaProject/Shirobot.Adapter.Milky",

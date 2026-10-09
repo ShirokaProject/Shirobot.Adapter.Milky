@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShirokaProject/ShiroBot
-          ref: v0.9.8
+          ref: v0.9.9
           path: shirobot-host
 
       - name: Setup .NET
