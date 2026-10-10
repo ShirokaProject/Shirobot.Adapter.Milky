@@ -15,7 +15,7 @@ namespace ShiroBot.Adapter.Milky;
 
 [BotAdapter("milky",
     Name = "MilkyAdapter",
-    Version = "2.2.4",
+    Version = "2.2.5",
     Description = "Milky (QQ NT) adapter for ShiroBot",
     Author = "ShirokaProject",
     GithubRepo = "https://github.com/ShirokaProject/Shirobot.Adapter.Milky",
@@ -172,7 +172,7 @@ public class MilkyAdapter : IBotAdapter, IConfigurableAdapter, IConfigurableComp
                 config.WebhookToken,
                 token,
                 listening,
-                onFirstEvent: IdentifyAfterFirstEventAsync).ConfigureAwait(false);
+                onFirstEvent: () => IdentifyAfterFirstEventAsync(token)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -184,16 +184,19 @@ public class MilkyAdapter : IBotAdapter, IConfigurableAdapter, IConfigurableComp
         }
     }
 
-    private async Task IdentifyAfterFirstEventAsync()
+    private async Task IdentifyAfterFirstEventAsync(CancellationToken token)
     {
         try
         {
-            var loginInfo = await _systemExtension.GetLoginInfoAsync().ConfigureAwait(false);
+            var loginInfo = await _systemExtension.GetLoginInfoAsync(token).ConfigureAwait(false);
             MilkySession.SelfId = loginInfo.Uin.ToString();
-            var result = await _systemExtension.GetImplInfoAsync().ConfigureAwait(false);
+            var result = await _systemExtension.GetImplInfoAsync(token).ConfigureAwait(false);
             ValidateMilkyVersion(result.MilkyVersion);
             Logger.Success(
                 $"已收到 Milky 推送 - Nickname: {loginInfo.Nickname}, Milky Impl: {result.ImplName} {result.ImplVersion}, MilkyVersion: {result.MilkyVersion}");
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
@@ -210,9 +213,9 @@ public class MilkyAdapter : IBotAdapter, IConfigurableAdapter, IConfigurableComp
             {
                 attempt++;
                 Logger.Info($"开始连接 Milky，第 {attempt} 次尝试...");
-                var loginInfo = await _systemExtension.GetLoginInfoAsync().ConfigureAwait(false);
+                var loginInfo = await _systemExtension.GetLoginInfoAsync(token).ConfigureAwait(false);
                 MilkySession.SelfId = loginInfo.Uin.ToString();
-                var result = await _systemExtension.GetImplInfoAsync().ConfigureAwait(false);
+                var result = await _systemExtension.GetImplInfoAsync(token).ConfigureAwait(false);
                 ValidateMilkyVersion(result.MilkyVersion);
                 Logger.Success(
                     $"Milky 登录成功 - Nickname: {loginInfo.Nickname}, Milky Impl: {result.ImplName} {result.ImplVersion}, MilkyVersion: {result.MilkyVersion}");

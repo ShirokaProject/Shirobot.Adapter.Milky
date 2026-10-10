@@ -18,6 +18,63 @@ namespace ShiroBot.MilkyAdapter.Tests;
 
 public sealed class MilkyCompatibilityTests
 {
+    [Theory]
+    [InlineData("ws", false)]
+    [InlineData("sse", false)]
+    [InlineData("ws", true)]
+    [InlineData("sse", true)]
+    public async Task Stop_cancels_pending_connection_identification(string protocol, bool stallVersionRequest)
+    {
+        using var portProbe = new TcpListener(IPAddress.Loopback, 0);
+        portProbe.Start();
+        var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
+        portProbe.Stop();
+        using var listener = new HttpListener();
+        var address = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(address);
+        listener.Start();
+        var adapter = new AdapterType { Logger = new SilentLogger() };
+        await adapter.OnConfigLoadedAsync(new MilkyAdapterConfig
+        {
+            Protocol = protocol, BaseUrl = address, ReconnectEnabled = false
+        }, CancellationToken.None);
+        try
+        {
+            await adapter.StartAsync();
+            var request = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("/api/get_login_info", request.Request.Url!.AbsolutePath);
+            if (stallVersionRequest)
+            {
+                var body = Encoding.UTF8.GetBytes("{\"uin\":123,\"nickname\":\"probe\"}");
+                request.Response.ContentType = "application/json";
+                request.Response.ContentLength64 = body.Length;
+                await request.Response.OutputStream.WriteAsync(body);
+                request.Response.Close();
+                request = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal("/api/get_impl_info", request.Request.Url!.AbsolutePath);
+            }
+            // Keep the HTTP request unanswered: Stop must cancel it instead of waiting 600 seconds.
+            await adapter.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            request.Response.Abort();
+            await adapter.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally
+        {
+            listener.Stop();
+            await adapter.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    private sealed class SilentLogger : ShiroBot.SDK.Plugin.IConsoleLogger
+    {
+        public bool IsEnabled { get; set; }
+        public void Log(string message) { }
+        public void Info(string message) { }
+        public void Success(string message) { }
+        public void Warning(string message) { }
+        public void Error(string message) { }
+    }
+
     [Fact]
     public void Adapter_declares_consistent_metadata_attribute()
     {

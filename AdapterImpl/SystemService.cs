@@ -9,10 +9,16 @@ public class SystemService
     private static MilkyClient Milky => MilkyClientManager.Instance;
 
     public Task<GetLoginInfoResponse> GetLoginInfoAsync() =>
-        Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest());
+        GetLoginInfoAsync(CancellationToken.None);
+
+    internal Task<GetLoginInfoResponse> GetLoginInfoAsync(CancellationToken cancellationToken) =>
+        Milky.RequestAsync<GetLoginInfoRequest, GetLoginInfoResponse>(new GetLoginInfoRequest(), cancellationToken);
 
     public Task<GetImplInfoResponse> GetImplInfoAsync() =>
-        Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest());
+        GetImplInfoAsync(CancellationToken.None);
+
+    internal Task<GetImplInfoResponse> GetImplInfoAsync(CancellationToken cancellationToken) =>
+        Milky.RequestAsync<GetImplInfoRequest, GetImplInfoResponse>(new GetImplInfoRequest(), cancellationToken);
 
     public Task<GetUserProfileResponse> GetUserProfileAsync(GetUserProfileRequest request) =>
         Milky.RequestAsync<GetUserProfileRequest, GetUserProfileResponse>(request);
