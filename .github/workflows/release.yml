@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShirokaProject/ShiroBot
-          ref: v0.9.9
+          ref: v1.0.0
           path: shirobot-host
 
       - name: Setup .NET
@@ -53,6 +53,20 @@ jobs:
           dotnet publish "$PROJECT_FILE" --configuration Release
           --output "$PUBLISH_DIR"
           -p:CopyAdapterToHost=false -p:ShiroBotPluginPackagingEnabled=true
+
+      - name: Verify release versions
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_TAG" in
+            v*) expected="${RELEASE_TAG#v}" ;;
+            *) echo "Release tag must start with v" >&2; exit 1 ;;
+          esac
+          version="$(dotnet msbuild "$PROJECT_FILE" -getProperty:Version -p:Configuration=Release)"
+          dotnet run --project scripts/version-check/VersionCheck.csproj -c Release -- \
+            "$PUBLISH_DIR/ShiroBot.Adapter.Milky.dll" "$version" "$expected"
 
       - name: Package adapter
         shell: bash
