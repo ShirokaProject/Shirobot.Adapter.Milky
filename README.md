@@ -1,11 +1,11 @@
 # ShiroBot Milky Adapter
 
-当前发布：`v2.2.1`。本版本使用 SDK `0.9.8`，需要宿主 `0.9.8` 的新 ABI；旧宿主不兼容。
+源码使用 SDK `1.0.0`，需要 ShiroBot `1.0.0` 或更高版本。SDK 版本集中在 `Directory.Build.props` 的 `ShiroBotSdkVersion`。
 
 ShiroBot 的 Milky 协议适配器，支持 HTTP API 调用以及 WebSocket、SSE、Webhook 事件接收。
 
 - Milky 协议版本：**1.3.0**（兼容 1.2.x - 1.3.x）
-- 需要 ShiroBot 0.9.4 及以上
+- 需要 ShiroBot 1.0.0 及以上
 
 ## 使用
 
@@ -39,14 +39,31 @@ netsh http add urlacl url=http://+:端口/ user=Everyone
 插件侧 ID 统一为字符串，Milky 的数值转换只发生在协议边界。群信息和成员查询统一在 `IQGroupApi`，
 入群申请使用 `QGroupJoinRequest`，审批直接传入该对象。引用旧 QQ Model 的插件需重新编译。
 
-构建需要宿主源码，默认路径为 `../../ShiroBot`；其他布局可指定：
+## Rider 一键运行与调试
+
+打开 `ShiroBot.MilkyAdapter.slnx`，选择 **Debug** 构建配置，在运行配置中选择 **ShiroBot**。
+首次 Debug 构建自动下载与 SDK 匹配的开发宿主，并把适配器、便携 PDB 和开发测试插件复制到
+`.shirobot-dev/host/<RID>/`。点击 Run 或 Debug 会直接启动这个宿主；Debug 可命中适配器源码断点，
+并支持 C# Hot Reload。保留 Rider 的运行前构建步骤。
+
+先构建一次即可生成本机的 `Properties/launchSettings.json`；Windows、macOS 和 Linux 使用相应宿主可执行文件。
+开发宿主默认 Dashboard 地址为 `http://127.0.0.1:7002/dashboard/`，登录令牌在开发目录的 `config.toml` 中。
+首次运行自动加载开发目录中的 Milky 实例；在 Dashboard 填写 Milky API 地址和事件接收配置。
+开发测试插件提供 `ping`、`adapter-info` 和 `adapter-echo ` 命令，供收到真实消息后验证收发。
+
+命令行也可以使用 `sh scripts/dev.sh`，Windows 使用
+`powershell -ExecutionPolicy Bypass -File scripts/dev.ps1`。
+加 `--prepare` 只准备文件、不启动宿主；已有构建输出时可追加 `--no-build`。
+开发目录由 Git 忽略，SDK 升级保留已有配置、实例和插件数据。
+
+Release 仍采用 SDK 单 DLL 打包；无需宿主源码：
 
 ```sh
-dotnet build -c Release -p:ShiroBotSourceRoot=/path/to/ShiroBot -p:CopyAdapterToHost=false
+dotnet publish ShiroBot.Adapter.Milky.csproj -c Release -p:CopyAdapterToHost=false
 ```
 
 ## 通用文件服务
 
 通过 `GetAdapterExtension<IFileService>()` 探测上传能力。Milky 同时保留 `IQFileApi`；普通文件发送使用单独的 `FileSegment`，支持群聊及私聊。上传即发布文件，但不返回消息 ID；发送结果用 `UploadedFile.FileId` 表示文件 ID，不能当作消息 ID。暂不支持文本/引用与文件混合发送。
 
-此次版本使用 SDK 0.9.9 / SDK ABI 1.1.0.0，要求宿主 0.9.9 或更高版本；QQ Model ABI 仍为 1.0.0.0。
+当前源码使用 SDK 1.0.0 / SDK ABI 1.2.0.0，要求宿主 1.0.0 或更高版本；QQ Model ABI 仍为 1.0.0.0。

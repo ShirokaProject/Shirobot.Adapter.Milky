@@ -9,7 +9,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 
-[assembly: ShiroBotApiCompatibility("0.9.2", "0.9.2")]
+[assembly: ShiroBotApiCompatibility("1.0", "1.0")]
 
 namespace ShiroBot.Adapter.Milky;
 

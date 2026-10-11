@@ -8,10 +8,16 @@
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <AssemblyName>ShiroBot.Adapter.Milky</AssemblyName>
         <RootNamespace>ShiroBot.Adapter.Milky</RootNamespace>
-        <HostAdapterDir>..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\adapters\ShiroBot.Adapter.Milky\</HostAdapterDir>
         <Configurations>Debug;Release</Configurations>
         <ShiroBotPluginSharedAssemblies>ShiroBot.Model.QQ;ShiroBot.Model.Discord;ShiroBot.Model.Telegram</ShiroBotPluginSharedAssemblies>
-        <ShiroBotPluginPackagingEnabled>true</ShiroBotPluginPackagingEnabled>
+        <ShiroBotPluginPackagingEnabled Condition="'$(Configuration)' == 'Release'">true</ShiroBotPluginPackagingEnabled>
+        <ShiroBotPluginPackagingEnabled Condition="'$(Configuration)' == 'Debug'">false</ShiroBotPluginPackagingEnabled>
+        <ShiroBotAvaloniaPreviewerSupport Condition="'$(Configuration)' == 'Debug'">true</ShiroBotAvaloniaPreviewerSupport>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <DebugType>portable</DebugType>
+        <DebugSymbols>true</DebugSymbols>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,6 +25,9 @@
         <Compile Remove="ShiroBot.Model/**/*.cs" />
         <Compile Remove="MilkyModelGenerator.Net/**/*.cs" />
         <Compile Remove="tests/**/*.cs" />
+        <Compile Remove="TestPlugin/**/*.cs" />
+        <Compile Remove="scripts/**/*.cs" />
+        <Compile Remove=".shirobot-dev/**/*.cs" />
         <Compile Remove="shirobot-host/**/*.cs" />
         <EmbeddedResource Remove="shirobot-host/**/*" />
         <None Remove="shirobot-host/**/*" />
@@ -29,22 +38,10 @@
     <ItemGroup>
         <!-- Milky 协议 DTO(本仓私有模型,由 MilkyModelGenerator.Net 生成),发布时由 SDK ILRepack 合并到适配器 DLL -->
         <ProjectReference Include="ShiroBot.Model\ShiroBot.Model.csproj" />
-        <PackageReference Include="ShiroBot.SDK" Version="0.9.9" />
+        <PackageReference Include="ShiroBot.SDK" Version="$(ShiroBotSdkVersion)" />
+        <ProjectReference Include="TestPlugin/ShiroBot.Adapter.Milky.TestPlugin.csproj"
+                          Condition="'$(Configuration)' == 'Debug'"
+                          ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 
-    <Target Name="CopyAdapterToHost"
-            AfterTargets="Build"
-            Condition="'$(Configuration)'=='Debug' and '$(CopyAdapterToHost)'!='false'">
-        <RemoveDir Directories="$(MSBuildProjectDirectory)\..\..\ShiroBot\Core\bin\Debug\$(TargetFramework)\adapters\ShiroBot.MilkyAdapter" />
-        <MakeDir Directories="$(HostAdapterDir)" />
-
-        <ItemGroup>
-            <AdapterDebugOutput Include="$(TargetDir)**\*"
-                                 Exclude="$(TargetDir)ShiroBot.SDK.dll;$(TargetDir)ShiroBot.SDK.pdb;$(TargetDir)ShiroBot.Model.QQ.dll;$(TargetDir)ShiroBot.Model.QQ.pdb;$(TargetDir)ShiroBot.MilkyAdapter.dll;$(TargetDir)ShiroBot.MilkyAdapter.pdb;$(TargetDir)ShiroBot.MilkyAdapter.deps.json;$(TargetDir)ShiroBot.Model.dll;$(TargetDir)ShiroBot.Model.pdb" />
-        </ItemGroup>
-
-        <Copy SourceFiles="@(AdapterDebugOutput)"
-              DestinationFiles="@(AdapterDebugOutput->'$(HostAdapterDir)%(RecursiveDir)%(Filename)%(Extension)')"
-              SkipUnchangedFiles="true" />
-    </Target>
 </Project>
