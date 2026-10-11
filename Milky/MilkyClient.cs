@@ -21,7 +21,7 @@ public class MilkyClient(HttpClient httpClient) : IDisposable
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var body = JsonContent.Create(request, options: JsonOptions);
+        using var body = new StreamingBase64JsonContent(request, typeof(TRequest), JsonOptions);
         using var response = await httpClient.PostAsync($"api/{ToApiName(typeof(TRequest).Name)}", body, cancellationToken);
         // Debug log the raw content for troubleshooting
         // var responseString = await response.Content.ReadAsStringAsync(cancellationToken);

@@ -33,6 +33,53 @@ public sealed class Base64JsonTests
         Assert.Equal(text, message[1].GetProperty("data").GetProperty("text").GetString());
     }
 
+    [Fact]
+    public async Task StreamingContentPreservesMultipleUrisAndUsesBoundedWrites()
+    {
+        var uri = "base64://" + new string('+', 100_000) + "/==";
+        var request = new SendGroupMessageRequest(123,
+            [new VideoOutgoingSegment(uri, uri), new RecordOutgoingSegment(uri), new TextOutgoingSegment("base64://bad\"\n")]);
+        using var content = new StreamingBase64JsonContent(request, request.GetType(), MilkyJson.JsonOptions);
+        using var stream = new MeasuringStream();
+        await content.CopyToAsync(stream);
+        Assert.Equal(stream.Length, content.Headers.ContentLength);
+        Assert.InRange(stream.LargestWrite, 1, 16 * 1024);
+        using var json = JsonDocument.Parse(stream.ToArray());
+        var segments = json.RootElement.GetProperty("message");
+        Assert.Equal(uri, segments[0].GetProperty("data").GetProperty("uri").GetString());
+        Assert.Equal(uri, segments[0].GetProperty("data").GetProperty("thumb_uri").GetString());
+        Assert.Equal(uri, segments[1].GetProperty("data").GetProperty("uri").GetString());
+        Assert.Equal("base64://bad\"\n", segments[2].GetProperty("data").GetProperty("text").GetString());
+        // HttpContent may be serialized more than once; the original payload is unchanged.
+        using var repeated = new MemoryStream();
+        await content.CopyToAsync(repeated);
+        Assert.Equal(stream.ToArray(), repeated.ToArray());
+    }
+
+    [Fact]
+    public async Task StreamingContentHonorsCancellationDuringThePayload()
+    {
+        var request = new SendGroupMessageRequest(123, [new ImageOutgoingSegment("base64://" + new string('A', 100_000))]);
+        using var content = new StreamingBase64JsonContent(request, request.GetType(), MilkyJson.JsonOptions);
+        using var cancellation = new CancellationTokenSource();
+        using var stream = new MeasuringStream(cancellation);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => content.CopyToAsync(stream, cancellation.Token));
+        Assert.InRange(stream.Length, 1, 20_000);
+    }
+
+    private sealed class MeasuringStream(CancellationTokenSource? cancellation = null) : MemoryStream
+    {
+        public int LargestWrite { get; private set; }
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            LargestWrite = Math.Max(LargestWrite, buffer.Length);
+            Write(buffer.Span);
+            if (Length > 100) cancellation?.Cancel();
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class CaptureHandler : HttpMessageHandler
     {
         public string Json { get; private set; } = "";
