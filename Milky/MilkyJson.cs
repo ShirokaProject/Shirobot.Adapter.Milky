@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ShiroBot.SDK.Abstractions;
@@ -14,6 +15,10 @@ internal static class MilkyJson
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
+            // Requests are application/json, never HTML. Base64 '+' must not expand to
+            // \u002B and allocate a payload-sized UTF-16 escape buffer before UTF-8 output.
+            // Quotes, backslashes and control characters remain JSON-escaped.
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
             PropertyNameCaseInsensitive = true,
